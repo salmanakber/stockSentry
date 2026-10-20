@@ -1,0 +1,23 @@
+{
+  "name": "stocksentry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "StockSentry / Bundle Safety — Shopify inventory monitoring monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @stocksentry/shared && npm run build -w @stocksentry/database && npm run build -w @stocksentry/api && npm run build -w @stocksentry/worker && npm run build -w @stocksentry/web",
+    "dev": "npm run dev --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test -w @stocksentry/shared",
+    "typecheck": "npm run build -w @stocksentry/shared && npm run build -w @stocksentry/database && npm run lint -w @stocksentry/api && npm run typecheck -w @stocksentry/worker",
+    "db:generate": "npm run generate -w @stocksentry/database",
+    "db:migrate": "npm run migrate -w @stocksentry/database",
+    "db:push": "npm run push -w @stocksentry/database"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

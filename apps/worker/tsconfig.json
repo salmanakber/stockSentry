@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "../..",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*",
+    "../api/src/services/**/*",
+    "../api/src/shopify/**/*",
+    "../api/src/queues/**/*"
+  ],
+  "references": [
+    { "path": "../../packages/database" },
+    { "path": "../../packages/shared" }
+  ]
+}

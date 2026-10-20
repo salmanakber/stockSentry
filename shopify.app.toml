@@ -1,0 +1,41 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "stocksentry"
+client_id = "YOUR_CLIENT_ID"
+application_url = "https://localhost:3000"
+embedded = true
+
+[access_scopes]
+scopes = "read_inventory,read_products,read_locations"
+
+[auth]
+redirect_urls = [
+  "https://localhost:4000/auth",
+  "https://localhost:4000/auth/callback",
+  "https://localhost:4000/api/auth",
+  "https://YOUR_PUBLIC_HOST/auth",
+  "https://YOUR_PUBLIC_HOST/auth/callback",
+  "https://YOUR_PUBLIC_HOST/api/auth"
+]
+
+[webhooks]
+api_version = "2025-01"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/shopify"
+
+  [[webhooks.subscriptions]]
+  topics = [ "inventory_levels/update", "inventory_levels/connect", "inventory_levels/disconnect" ]
+  uri = "/webhooks/shopify"
+
+  [[webhooks.subscriptions]]
+  topics = [ "products/update", "products/delete" ]
+  uri = "/webhooks/shopify"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/shopify"
+
+[pos]
+embedded = false

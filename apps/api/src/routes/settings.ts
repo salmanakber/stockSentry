@@ -1,0 +1,171 @@
+import { Router } from "express";
+import { prisma, type IncidentSeverity, type Prisma } from "@stocksentry/database";
+import { detectionRuleConfigSchema } from "@stocksentry/shared";
+import { requireMerchant } from "../middleware/auth.js";
+
+export const settingsRouter = Router();
+
+settingsRouter.get("/settings", requireMerchant, async (req, res, next) => {
+  try {
+    const shopId = req.shopId!;
+    const [settings, rules, notificationPrefs, shop] = await Promise.all([
+      prisma.shopSettings.findUnique({ where: { shopId } }),
+      prisma.detectionRule.findMany({
+        where: { shopId },
+        orderBy: { ruleType: "asc" },
+      }),
+      prisma.notificationPreference.findMany({ where: { shopId } }),
+      prisma.shop.findUniqueOrThrow({
+        where: { id: shopId },
+        select: {
+          planSlug: true,
+          reconciliationIntervalHours: true,
+          onboardingCompleted: true,
+        },
+      }),
+    ]);
+
+    res.json({
+      shop,
+      settings,
+      detectionRules: rules,
+      notificationPreferences: notificationPrefs,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+settingsRouter.patch("/settings", requireMerchant, async (req, res, next) => {
+  try {
+    const shopId = req.shopId!;
+    const body = req.body as {
+      thresholds?: unknown;
+      monitoring?: unknown;
+      ai?: unknown;
+      retention?: unknown;
+      reconciliationIntervalHours?: number;
+      detectionRules?: Array<{
+        ruleType: string;
+        enabled?: boolean;
+        configuration?: unknown;
+      }>;
+      notificationPreferences?: Array<{
+        channel: "IN_APP" | "EMAIL" | "SLACK";
+        enabled?: boolean;
+        minSeverity?: IncidentSeverity;
+        digestEnabled?: boolean;
+        destinationRef?: string | null;
+      }>;
+    };
+
+    if (typeof body.reconciliationIntervalHours === "number") {
+      await prisma.shop.update({
+        where: { id: shopId },
+        data: {
+          reconciliationIntervalHours: Math.max(
+            1,
+            body.reconciliationIntervalHours,
+          ),
+        },
+      });
+    }
+
+    const settings = await prisma.shopSettings.upsert({
+      where: { shopId },
+      create: {
+        shopId,
+        thresholds: (body.thresholds ?? {}) as Prisma.InputJsonValue,
+        monitoring: (body.monitoring ?? null) as Prisma.InputJsonValue,
+        ai: (body.ai ?? null) as Prisma.InputJsonValue,
+        retention: (body.retention ?? null) as Prisma.InputJsonValue,
+      },
+      update: {
+        ...(body.thresholds !== undefined
+          ? { thresholds: body.thresholds as Prisma.InputJsonValue }
+          : {}),
+        ...(body.monitoring !== undefined
+          ? { monitoring: body.monitoring as Prisma.InputJsonValue }
+          : {}),
+        ...(body.ai !== undefined
+          ? { ai: body.ai as Prisma.InputJsonValue }
+          : {}),
+        ...(body.retention !== undefined
+          ? { retention: body.retention as Prisma.InputJsonValue }
+          : {}),
+      },
+    });
+
+    if (body.detectionRules?.length) {
+      for (const rule of body.detectionRules) {
+        const configParsed = detectionRuleConfigSchema.safeParse(
+          rule.configuration ?? {},
+        );
+        await prisma.detectionRule.updateMany({
+          where: { shopId, ruleType: rule.ruleType },
+          data: {
+            ...(rule.enabled !== undefined ? { enabled: rule.enabled } : {}),
+            ...(rule.configuration !== undefined && configParsed.success
+              ? {
+                  configuration:
+                    configParsed.data as unknown as Prisma.InputJsonValue,
+                }
+              : {}),
+          },
+        });
+      }
+    }
+
+    if (body.notificationPreferences?.length) {
+      for (const pref of body.notificationPreferences) {
+        await prisma.notificationPreference.upsert({
+          where: {
+            shopId_channel: { shopId, channel: pref.channel },
+          },
+          create: {
+            shopId,
+            channel: pref.channel,
+            enabled: pref.enabled ?? true,
+            minSeverity: pref.minSeverity ?? "MEDIUM",
+            digestEnabled: pref.digestEnabled ?? false,
+            destinationRef: pref.destinationRef ?? null,
+          },
+          update: {
+            ...(pref.enabled !== undefined ? { enabled: pref.enabled } : {}),
+            ...(pref.minSeverity !== undefined
+              ? { minSeverity: pref.minSeverity }
+              : {}),
+            ...(pref.digestEnabled !== undefined
+              ? { digestEnabled: pref.digestEnabled }
+              : {}),
+            ...(pref.destinationRef !== undefined
+              ? { destinationRef: pref.destinationRef }
+              : {}),
+          },
+        });
+      }
+    }
+
+    const [rules, notificationPrefs, shop] = await Promise.all([
+      prisma.detectionRule.findMany({ where: { shopId } }),
+      prisma.notificationPreference.findMany({ where: { shopId } }),
+      prisma.shop.findUniqueOrThrow({
+        where: { id: shopId },
+        select: {
+          planSlug: true,
+          reconciliationIntervalHours: true,
+          onboardingCompleted: true,
+        },
+      }),
+    ]);
+
+    res.json({
+      shop,
+      settings,
+      detectionRules: rules,
+      notificationPreferences: notificationPrefs,
+    });
+  } catch (err) {
+    next(err);
+  }
+});

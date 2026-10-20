@@ -1,0 +1,516 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Shopify session storage (PrismaSessionStorage compatible)
+// ---------------------------------------------------------------------------
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+
+  @@index([shop])
+}
+
+// ---------------------------------------------------------------------------
+// Shop / tenant
+// ---------------------------------------------------------------------------
+
+enum InstallationStatus {
+  PENDING
+  INSTALLED
+  UNINSTALLED
+}
+
+enum BillingStatus {
+  NONE
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  FROZEN
+}
+
+model Shop {
+  id                          String             @id @default(cuid())
+  shopDomain                  String             @unique
+  installationStatus          InstallationStatus @default(PENDING)
+  installedAt                 DateTime?
+  uninstalledAt               DateTime?
+  planSlug                    String             @default("free")
+  billingStatus               BillingStatus      @default(NONE)
+  shopifySubscriptionGid      String?
+  onboardingCompleted         Boolean            @default(false)
+  lastWebhookAt               DateTime?
+  lastReconciledAt            DateTime?
+  reconciliationIntervalHours Int                @default(6)
+  aiReportsUsedMonth          Int                @default(0)
+  aiReportsMonthKey           String?
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
+
+  inventoryItems          InventoryItem[]
+  inventoryLocations      InventoryLocation[]
+  inventoryObservations   InventoryObservation[]
+  webhookEvents           WebhookEvent[]
+  detectionRules          DetectionRule[]
+  incidents               Incident[]
+  incidentEvidence        IncidentEvidence[]
+  aiReports               AiReport[]
+  bundleGroups            BundleGroup[]
+  bundleGroupItems        BundleGroupItem[]
+  incidentActivities      IncidentActivity[]
+  incidentNotes           IncidentNote[]
+  notificationDeliveries  NotificationDelivery[]
+  notificationPreferences NotificationPreference[]
+  exportJobs              ExportJob[]
+  shopSettings            ShopSettings?
+
+  @@index([installationStatus])
+  @@index([planSlug])
+}
+
+// ---------------------------------------------------------------------------
+// Inventory
+// ---------------------------------------------------------------------------
+
+model InventoryItem {
+  id                       String    @id @default(cuid())
+  shopId                   String
+  shopifyInventoryItemGid  String
+  productGid               String?
+  variantGid               String?
+  productTitle             String?
+  variantTitle             String?
+  sku                      String?
+  tracked                  Boolean   @default(true)
+  deletedAt                DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  shop          Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  observations  InventoryObservation[]
+  incidents     Incident[]
+  bundleItems   BundleGroupItem[]
+
+  @@unique([shopId, shopifyInventoryItemGid])
+  @@index([shopId, productGid])
+  @@index([shopId, deletedAt])
+}
+
+model InventoryLocation {
+  id                 String   @id @default(cuid())
+  shopId             String
+  shopifyLocationGid String
+  name               String
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  shop         Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  observations InventoryObservation[]
+  incidents    Incident[]
+
+  @@unique([shopId, shopifyLocationGid])
+  @@index([shopId, active])
+}
+
+enum ObservationSource {
+  BASELINE
+  WEBHOOK
+  API_READ
+  RECONCILIATION
+}
+
+enum DataQuality {
+  COMPLETE
+  PARTIAL
+  STALE
+  UNKNOWN_BASELINE
+  DEGRADED
+}
+
+model InventoryObservation {
+  id              String            @id @default(cuid())
+  shopId          String
+  inventoryItemId String
+  locationId      String
+  quantityName    String            @default("available")
+  quantity        Int
+  observedAt      DateTime
+  receivedAt      DateTime          @default(now())
+  source          ObservationSource
+  sourceEventId   String?
+  dataQuality     DataQuality       @default(COMPLETE)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  shop          Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem     @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  location      InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, inventoryItemId, locationId, observedAt])
+  @@index([shopId, observedAt])
+  @@index([shopId, source])
+  @@index([sourceEventId])
+}
+
+// ---------------------------------------------------------------------------
+// Webhooks
+// ---------------------------------------------------------------------------
+
+enum WebhookEventStatus {
+  RECEIVED
+  QUEUED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+model WebhookEvent {
+  id           String             @id @default(cuid())
+  shopId       String
+  eventKey     String
+  topic        String
+  receivedAt   DateTime           @default(now())
+  processedAt  DateTime?
+  status       WebhookEventStatus @default(RECEIVED)
+  attemptCount Int                @default(0)
+  errorCode    String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, eventKey])
+  @@index([shopId, status, receivedAt])
+  @@index([shopId, topic])
+}
+
+// ---------------------------------------------------------------------------
+// Detection & incidents
+// ---------------------------------------------------------------------------
+
+model DetectionRule {
+  id            String   @id @default(cuid())
+  shopId        String
+  ruleType      String
+  enabled       Boolean  @default(true)
+  configuration Json
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, ruleType])
+  @@index([shopId, enabled])
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  NEW
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+model Incident {
+  id              String           @id @default(cuid())
+  shopId          String
+  incidentKey     String
+  type            String
+  severity        IncidentSeverity @default(MEDIUM)
+  status          IncidentStatus   @default(NEW)
+  inventoryItemId String?
+  locationId      String?
+  ruleType        String
+  ruleVersion     Int
+  evidenceVersion String
+  firstDetectedAt DateTime
+  lastDetectedAt  DateTime
+  resolvedAt      DateTime?
+  resolutionReason String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  shop              Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  inventoryItem     InventoryItem?         @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  location          InventoryLocation?     @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  evidence          IncidentEvidence[]
+  aiReports         AiReport[]
+  activities        IncidentActivity[]
+  notes             IncidentNote[]
+  notifications     NotificationDelivery[]
+
+  @@unique([shopId, incidentKey])
+  @@index([shopId, status, severity])
+  @@index([shopId, lastDetectedAt])
+  @@index([shopId, inventoryItemId, locationId, ruleType])
+}
+
+model IncidentEvidence {
+  id              String   @id @default(cuid())
+  shopId          String
+  incidentId      String
+  evidenceType    String
+  observationIds  String[] @default([])
+  evidencePayload Json
+  createdAt       DateTime @default(now())
+
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, incidentId])
+  @@index([incidentId, createdAt])
+}
+
+enum AiReportStatus {
+  NOT_GENERATED
+  QUEUED
+  GENERATED
+  FAILED
+  STALE
+}
+
+model AiReport {
+  id             String        @id @default(cuid())
+  shopId         String
+  incidentId     String
+  evidenceVersion String
+  provider       String
+  model          String
+  promptVersion  String
+  status         AiReportStatus @default(QUEUED)
+  outputJson     Json?
+  inputTokens    Int?
+  outputTokens   Int?
+  estimatedCost  Decimal?      @db.Decimal(12, 6)
+  errorCode      String?
+  generatedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, incidentId, evidenceVersion])
+  @@index([shopId, status])
+  @@index([incidentId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Bundle mapping
+// ---------------------------------------------------------------------------
+
+enum RelationshipSource {
+  MANUAL
+  INTEGRATION
+}
+
+model BundleGroup {
+  id                 String             @id @default(cuid())
+  shopId             String
+  name               String
+  description        String?
+  relationshipSource RelationshipSource @default(MANUAL)
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  shop  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items BundleGroupItem[]
+
+  @@index([shopId, active])
+}
+
+enum BundleItemRole {
+  COMPONENT
+  BUNDLE
+  SHARED
+}
+
+model BundleGroupItem {
+  id              String         @id @default(cuid())
+  shopId          String
+  bundleGroupId   String
+  inventoryItemId String
+  role            BundleItemRole @default(COMPONENT)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  bundleGroup   BundleGroup   @relation(fields: [bundleGroupId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([bundleGroupId, inventoryItemId])
+  @@index([shopId, inventoryItemId])
+}
+
+// ---------------------------------------------------------------------------
+// Incident activity & notes
+// ---------------------------------------------------------------------------
+
+enum ActorType {
+  SYSTEM
+  MERCHANT
+  STAFF
+  APP
+}
+
+model IncidentActivity {
+  id           String    @id @default(cuid())
+  shopId       String
+  incidentId   String
+  actorType    ActorType
+  actorId      String?
+  activityType String
+  content      String?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, incidentId, createdAt])
+}
+
+model IncidentNote {
+  id         String    @id @default(cuid())
+  shopId     String
+  incidentId String
+  actorType  ActorType @default(MERCHANT)
+  actorId    String?
+  content    String
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, incidentId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SLACK
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SUPPRESSED
+}
+
+model NotificationDelivery {
+  id          String              @id @default(cuid())
+  shopId      String
+  incidentId  String?
+  channel     NotificationChannel
+  destination String?
+  status      DeliveryStatus      @default(PENDING)
+  attemptCount Int                @default(0)
+  sentAt      DateTime?
+  errorCode   String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  incident Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, status, createdAt])
+  @@index([shopId, incidentId])
+}
+
+model NotificationPreference {
+  id                String              @id @default(cuid())
+  shopId            String
+  channel           NotificationChannel
+  enabled           Boolean             @default(true)
+  minSeverity       IncidentSeverity    @default(MEDIUM)
+  digestEnabled     Boolean             @default(false)
+  destinationRef    String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, channel])
+}
+
+// ---------------------------------------------------------------------------
+// Exports & settings
+// ---------------------------------------------------------------------------
+
+enum ExportJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model ExportJob {
+  id          String          @id @default(cuid())
+  shopId      String
+  exportType  String
+  status      ExportJobStatus @default(QUEUED)
+  filterJson  Json?
+  resultUrl   String?
+  errorCode   String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, status, createdAt])
+}
+
+model ShopSettings {
+  id         String   @id @default(cuid())
+  shopId     String   @unique
+  thresholds Json
+  monitoring Json?
+  ai         Json?
+  retention  Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
