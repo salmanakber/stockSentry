@@ -218,6 +218,7 @@ export async function getBillingStatus(shopId: string) {
     planSlug: shop.planSlug,
     billingStatus: shop.billingStatus,
     shopifySubscriptionGid: shop.shopifySubscriptionGid,
+    requiresPlanSelection: shop.requiresPlanSelection,
     entitlements: plan,
     usage: {
       monitoredItems,
@@ -264,6 +265,7 @@ export async function createPlanSubscription(input: {
         planSlug: "free",
         planId: freePlan?.id ?? null,
         planAssignedByAdmin: false,
+        requiresPlanSelection: false,
         billingStatus: "NONE",
         shopifySubscriptionGid: null,
       },
@@ -322,6 +324,7 @@ export async function createPlanSubscription(input: {
       planSlug,
       planId: planRow?.id ?? null,
       planAssignedByAdmin: false,
+      requiresPlanSelection: false,
       billingStatus: "TRIAL",
       shopifySubscriptionGid: subscriptionId,
     },
@@ -391,6 +394,7 @@ export async function reconcileSubscriptionStatus(input: {
     data: {
       planSlug: mappedSlug,
       planId: planRow?.id ?? null,
+      requiresPlanSelection: false,
       billingStatus,
       shopifySubscriptionGid: primary.id,
     },

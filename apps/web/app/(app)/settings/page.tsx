@@ -395,7 +395,7 @@ export default function SettingsPage() {
               title="Billing"
               subtitle="Current plan and subscription upgrades"
             />
-            {billing?.planSlug === "free" ? (
+            {billing?.requiresPlanSelection ? (
               <div className="banner" role="status">
                 <div>
                   <strong>Choose a plan to continue</strong>

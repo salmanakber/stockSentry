@@ -280,6 +280,7 @@ export interface MerchantPlan {
 export interface BillingStatusResponse {
   planSlug?: string;
   billingStatus?: string;
+  requiresPlanSelection?: boolean;
   entitlements?: {
     displayName?: string;
     priceUsdMonthly?: number;

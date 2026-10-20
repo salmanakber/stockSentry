@@ -21,6 +21,7 @@ export const shopRepository = {
                 planSlug: "free",
                 planId: null,
                 planAssignedByAdmin: false,
+                requiresPlanSelection: true,
                 billingStatus: "NONE",
                 shopifySubscriptionGid: null,
               }

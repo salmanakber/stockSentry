@@ -61,6 +61,8 @@ model Shop {
   planSlug                    String             @default("free")
   planId                      String?
   planAssignedByAdmin         Boolean            @default(false)
+  /** True after uninstall/reinstall until merchant (or admin) selects a plan again. */
+  requiresPlanSelection       Boolean            @default(false)
   billingStatus               BillingStatus      @default(NONE)
   shopifySubscriptionGid      String?
   onboardingCompleted         Boolean            @default(false)

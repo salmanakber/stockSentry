@@ -122,6 +122,7 @@ export async function assignShopPlan(input: {
       planSlug: slug,
       planId: plan?.id ?? null,
       planAssignedByAdmin: input.planAssignedByAdmin ?? false,
+      requiresPlanSelection: false,
       ...(input.billingStatus ? { billingStatus: input.billingStatus } : {}),
       ...(input.clearShopifySubscription
         ? { shopifySubscriptionGid: null }
