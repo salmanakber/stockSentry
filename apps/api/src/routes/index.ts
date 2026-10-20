@@ -50,6 +50,7 @@ apiRouter.get("/", (_req, res) => {
       billingStatus: "/api/v1/billing/status",
       billingSubscribe: "/api/v1/billing/subscribe",
       billingConfirm: "/api/v1/billing/confirm",
+      plans: "/api/v1/plans",
       admin: "/api/admin",
       auth: "/auth",
       authCallback: "/auth/callback",

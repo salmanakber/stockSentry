@@ -605,7 +605,7 @@ adminRouter.post("/config/ai/test", requireAdmin, async (req, res, next) => {
 adminRouter.get("/settings", requireAdmin, (_req, res) => {
   res.json({
     bootstrapNote:
-      "Create the first admin with POST /api/admin/bootstrap and header x-stocksentry-bootstrap-secret matching ADMIN_BOOTSTRAP_SECRET. Then sign in at /admin/login with email + password. JWTs are sent as x-stocksentry-admin-token.",
+      "Set ADMIN_EMAIL, ADMIN_PASSWORD, and ADMIN_JWT_SECRET in the monorepo root .env. On API boot, ensureAdminFromEnv upserts an OWNER AdminUser from those values. Sign in at /admin/login; the JWT is stored in the browser and sent as x-stocksentry-admin-token. Optional: POST /api/admin/bootstrap with x-stocksentry-bootstrap-secret if no AdminUser exists yet.",
     jwt: {
       headerName: "x-stocksentry-admin-token",
       algorithm: "HS256",
@@ -614,7 +614,7 @@ adminRouter.get("/settings", requireAdmin, (_req, res) => {
         process.env.ADMIN_JWT_SECRET || process.env.SESSION_SECRET,
       ),
     },
-    adminPasswordConfigured: false,
+    adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD),
     bootstrapSecretConfigured: Boolean(process.env.ADMIN_BOOTSTRAP_SECRET),
   });
 });

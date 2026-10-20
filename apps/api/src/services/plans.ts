@@ -12,6 +12,7 @@ function planRowToEntitlements(row: Plan): PlanEntitlements {
   return {
     slug: row.slug,
     displayName: row.displayName,
+    description: row.description,
     priceUsdMonthly: Number(row.priceUsdMonthly),
     trialDays: row.trialDays,
     maxMonitoredItems: row.maxMonitoredItems,
@@ -52,30 +53,33 @@ export async function resolvePlan(slug: string): Promise<PlanEntitlements> {
   return getPlanEntitlements(slug || "free");
 }
 
-/** Ensure free/starter/pro rows exist from static defaults (migrate/boot). */
+/** Ensure free/starter/pro/growth rows exist from static defaults (migrate/boot). */
 export async function ensureDefaultPlans(): Promise<void> {
   const seeds = Object.values(PLAN_ENTITLEMENTS);
   for (const plan of seeds) {
+    const data = {
+      displayName: plan.displayName,
+      description: plan.description ?? null,
+      priceUsdMonthly: plan.priceUsdMonthly,
+      trialDays: plan.trialDays ?? 0,
+      maxMonitoredItems: plan.maxMonitoredItems,
+      historyDays: plan.historyDays,
+      maxOpenIncidents: plan.maxOpenIncidents,
+      aiReportsPerMonth: plan.aiReportsPerMonth,
+      advancedRules: plan.advancedRules,
+      exportsEnabled: plan.exportsEnabled,
+      teamWorkflows: plan.teamWorkflows,
+      isFree: plan.isFree ?? plan.priceUsdMonthly <= 0,
+      active: plan.active ?? true,
+      sortOrder: plan.sortOrder ?? 0,
+    };
     await prisma.plan.upsert({
       where: { slug: plan.slug },
       create: {
         slug: plan.slug,
-        displayName: plan.displayName,
-        description: null,
-        priceUsdMonthly: plan.priceUsdMonthly,
-        trialDays: plan.trialDays ?? 0,
-        maxMonitoredItems: plan.maxMonitoredItems,
-        historyDays: plan.historyDays,
-        maxOpenIncidents: plan.maxOpenIncidents,
-        aiReportsPerMonth: plan.aiReportsPerMonth,
-        advancedRules: plan.advancedRules,
-        exportsEnabled: plan.exportsEnabled,
-        teamWorkflows: plan.teamWorkflows,
-        isFree: plan.isFree ?? plan.priceUsdMonthly <= 0,
-        active: plan.active ?? true,
-        sortOrder: plan.sortOrder ?? 0,
+        ...data,
       },
-      update: {},
+      update: data,
     });
   }
   clearPlanEntitlementsCache();

@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { AI_DEFAULTS } from "./defaults.js";
 
-export const PLAN_SLUGS = ["free", "starter", "pro"] as const;
+export const PLAN_SLUGS = ["free", "starter", "pro", "growth"] as const;
 export type PlanSlug = (typeof PLAN_SLUGS)[number];
 
 export const planSlugSchema = z.enum(PLAN_SLUGS);
@@ -9,6 +8,7 @@ export const planSlugSchema = z.enum(PLAN_SLUGS);
 export type PlanEntitlements = {
   slug: string;
   displayName: string;
+  description?: string | null;
   /** Recurring USD price hypothesis for Shopify Billing stubs. Free = 0. */
   priceUsdMonthly: number;
   trialDays?: number;
@@ -37,13 +37,15 @@ export const ENTITLEMENT_ERROR_CODES = {
 export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
   free: {
     slug: "free",
-    displayName: "Free / Trial",
+    displayName: "Free",
+    description:
+      "Try Bundle Safety on a small catalog — monitoring, basic alerts, limited AI.",
     priceUsdMonthly: 0,
     trialDays: 0,
-    maxMonitoredItems: 100,
-    historyDays: 14,
-    maxOpenIncidents: 25,
-    aiReportsPerMonth: 5,
+    maxMonitoredItems: 75,
+    historyDays: 7,
+    maxOpenIncidents: 15,
+    aiReportsPerMonth: 3,
     advancedRules: false,
     exportsEnabled: false,
     teamWorkflows: false,
@@ -54,12 +56,14 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
   starter: {
     slug: "starter",
     displayName: "Starter",
-    priceUsdMonthly: 19,
-    trialDays: 7,
-    maxMonitoredItems: 1000,
-    historyDays: 90,
-    maxOpenIncidents: 200,
-    aiReportsPerMonth: AI_DEFAULTS.monthlyReportLimit,
+    description:
+      "For growing stores — more items, CSV exports, and monthly AI incident reports.",
+    priceUsdMonthly: 14.99,
+    trialDays: 14,
+    maxMonitoredItems: 500,
+    historyDays: 60,
+    maxOpenIncidents: 100,
+    aiReportsPerMonth: 40,
     advancedRules: false,
     exportsEnabled: true,
     teamWorkflows: false,
@@ -70,18 +74,38 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
   pro: {
     slug: "pro",
     displayName: "Pro",
-    priceUsdMonthly: 49,
-    trialDays: 7,
-    maxMonitoredItems: 10000,
-    historyDays: 365,
-    maxOpenIncidents: 2000,
-    aiReportsPerMonth: 500,
+    description:
+      "Advanced detection rules, team workflows, and deeper history for serious ops teams.",
+    priceUsdMonthly: 39.99,
+    trialDays: 14,
+    maxMonitoredItems: 5000,
+    historyDays: 180,
+    maxOpenIncidents: 1000,
+    aiReportsPerMonth: 200,
     advancedRules: true,
     exportsEnabled: true,
     teamWorkflows: true,
     isFree: false,
     active: true,
     sortOrder: 2,
+  },
+  growth: {
+    slug: "growth",
+    displayName: "Growth",
+    description:
+      "High-volume catalogs and multi-location merchants who need scale.",
+    priceUsdMonthly: 99,
+    trialDays: 14,
+    maxMonitoredItems: 50000,
+    historyDays: 365,
+    maxOpenIncidents: 10000,
+    aiReportsPerMonth: 1000,
+    advancedRules: true,
+    exportsEnabled: true,
+    teamWorkflows: true,
+    isFree: false,
+    active: true,
+    sortOrder: 3,
   },
 };
 

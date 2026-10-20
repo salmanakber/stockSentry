@@ -22,7 +22,9 @@ export function adminTokenHeaderName(): string {
 }
 
 export function signAdminToken(payload: AdminJwtPayload): string {
-  return jwt.sign(payload, adminSecret(), { expiresIn: "12h" });
+  const hours = Number(process.env.ADMIN_JWT_TTL_HOURS ?? 12);
+  const ttl = Number.isFinite(hours) && hours > 0 ? hours : 12;
+  return jwt.sign(payload, adminSecret(), { expiresIn: `${ttl}h` });
 }
 
 export function verifyAdminToken(token: string): AdminJwtPayload | null {

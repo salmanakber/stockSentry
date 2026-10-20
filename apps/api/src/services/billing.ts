@@ -152,7 +152,8 @@ function mapShopifyStatus(status: string | undefined): BillingStatus {
 
 function planSlugFromSubscriptionName(name: string): PlanSlug | null {
   const lower = name.toLowerCase();
-  for (const slug of ["pro", "starter", "free"] as const) {
+  // Longer / more specific slugs first so "growth" is not missed.
+  for (const slug of ["growth", "starter", "pro", "free"] as const) {
     if (lower.includes(slug)) return slug;
   }
   return null;

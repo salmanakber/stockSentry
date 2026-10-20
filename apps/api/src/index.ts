@@ -1,5 +1,6 @@
 import "./load-env.js";
 import { createApp } from "./app.js";
+import { ensureAdminFromEnv } from "./services/ensure-admin.js";
 import {
   ensureDefaultPlans,
   registerDbPlanLoader,
@@ -13,6 +14,10 @@ const app = createApp();
 
 void ensureDefaultPlans().catch((err) => {
   console.warn("[stocksentry-api] ensureDefaultPlans failed", err);
+});
+
+void ensureAdminFromEnv().catch((err) => {
+  console.warn("[stocksentry-api] ensureAdminFromEnv failed", err);
 });
 
 app.listen(port, () => {

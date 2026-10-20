@@ -9,8 +9,19 @@ import {
   getBillingStatus,
   reconcileSubscriptionStatus,
 } from "../services/billing.js";
+import { listActivePlans } from "../services/plans.js";
 
 export const billingRouter = Router();
+
+/** Active plans for merchant Settings / plan picker (requireMerchant). */
+billingRouter.get("/plans", requireMerchant, async (_req, res, next) => {
+  try {
+    const items = await listActivePlans();
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+});
 
 async function billingStatusHandler(
   req: Request,
@@ -56,7 +67,7 @@ billingRouter.post(
         res.status(400).json({
           error: "invalid_plan",
           code: "ENTITLEMENT_INVALID_PLAN",
-          message: "planSlug must be one of: free, starter, pro",
+          message: "planSlug must be one of: free, starter, pro, growth",
         });
         return;
       }

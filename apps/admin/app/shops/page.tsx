@@ -118,7 +118,7 @@ export default function ShopsPage() {
                     >
                       {(plans.length
                         ? plans.map((p) => p.slug)
-                        : ["free", "starter", "pro"]
+                        : ["free", "starter", "pro", "growth"]
                       ).map((slug) => (
                         <option key={slug} value={slug}>
                           {slug}

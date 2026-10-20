@@ -45,7 +45,7 @@ export default function SettingsPage() {
         </div>
         <p className="note" style={{ marginTop: 0 }}>
           {info?.bootstrapNote ??
-            "Set ADMIN_PASSWORD and ADMIN_JWT_SECRET in the monorepo root .env, then sign in at /admin/login. The JWT is stored in the browser and sent as x-stocksentry-admin-token."}
+            "Set ADMIN_EMAIL, ADMIN_PASSWORD, and ADMIN_JWT_SECRET in the monorepo root .env; JWT is stored in the browser as x-stocksentry-admin-token."}
         </p>
         <div className="field-row" style={{ marginTop: 16 }}>
           <div>

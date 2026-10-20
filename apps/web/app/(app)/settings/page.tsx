@@ -11,6 +11,7 @@ import { apiRequest } from "../../../lib/api";
 import type {
   BillingStatusResponse,
   DetectionRuleRow,
+  MerchantPlan,
   NotificationPrefRow,
   SettingsResponse,
   SettingsThresholds,
@@ -25,6 +26,25 @@ type PrefChannel = "IN_APP" | "EMAIL";
 function num(v: unknown, fallback: number): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function formatPrice(usd: number): string {
+  if (usd <= 0) return "$0";
+  return Number.isInteger(usd) ? `$${usd}` : `$${usd.toFixed(2)}`;
+}
+
+function planFeatureBullets(plan: MerchantPlan): string[] {
+  const bullets = [
+    `${plan.maxMonitoredItems.toLocaleString()} monitored items`,
+    `${plan.historyDays}-day history`,
+    `${plan.maxOpenIncidents.toLocaleString()} open incidents`,
+    `${plan.aiReportsPerMonth} AI reports / mo`,
+  ];
+  if (plan.exportsEnabled) bullets.push("CSV exports");
+  if (plan.advancedRules) bullets.push("Advanced detection rules");
+  if (plan.teamWorkflows) bullets.push("Team workflows");
+  if ((plan.trialDays ?? 0) > 0) bullets.push(`${plan.trialDays}-day trial`);
+  return bullets;
 }
 
 export default function SettingsPage() {
@@ -49,6 +69,7 @@ export default function SettingsPage() {
     EMAIL: { enabled: false, minSeverity: "HIGH" },
   });
   const [billing, setBilling] = useState<BillingStatusResponse | null>(null);
+  const [plans, setPlans] = useState<MerchantPlan[]>([]);
   const [subscribeBusy, setSubscribeBusy] = useState<string | null>(null);
 
   const applySettings = (res: SettingsResponse) => {
@@ -83,18 +104,23 @@ export default function SettingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [settings, bill] = await Promise.all([
+      const [settings, bill, planList] = await Promise.all([
         apiRequest<SettingsResponse>("/api/v1/settings", { shop }),
         apiRequest<BillingStatusResponse>("/api/v1/billing/status", {
           shop,
         }).catch(() =>
           apiRequest<BillingStatusResponse>("/api/v1/billing", { shop }),
         ),
+        apiRequest<{ items: MerchantPlan[] }>("/api/v1/plans", { shop }).catch(
+          () => ({ items: [] as MerchantPlan[] }),
+        ),
       ]);
       applySettings(settings);
       setBilling(bill);
+      setPlans(planList.items ?? []);
     } catch {
       setBilling(null);
+      setPlans([]);
     } finally {
       setLoading(false);
     }
@@ -140,7 +166,7 @@ export default function SettingsPage() {
     }
   };
 
-  const subscribe = async (planSlug: "starter" | "pro") => {
+  const subscribe = async (planSlug: string) => {
     if (subscribeBusy) return;
     setSubscribeBusy(planSlug);
     try {
@@ -411,23 +437,81 @@ export default function SettingsPage() {
                 </b>
               </div>
             ) : null}
-            <div className="form-actions">
-              <Button
-                variant="primary"
-                disabled={subscribeBusy !== null}
-                onClick={() => void subscribe("starter")}
-              >
-                {subscribeBusy === "starter"
-                  ? "Opening…"
-                  : "Subscribe Starter"}
-              </Button>
-              <Button
-                disabled={subscribeBusy !== null}
-                onClick={() => void subscribe("pro")}
-              >
-                {subscribeBusy === "pro" ? "Opening…" : "Subscribe Pro"}
-              </Button>
-            </div>
+            {plans.length > 0 ? (
+              <div className="plan-grid">
+                {plans.map((plan) => {
+                  const current = billing?.planSlug === plan.slug;
+                  const paid = plan.priceUsdMonthly > 0;
+                  return (
+                    <div
+                      key={plan.slug}
+                      className={`plan-card${current ? " current" : ""}`}
+                    >
+                      <div>
+                        <b>{plan.displayName}</b>
+                        {current ? (
+                          <span className="chip on" style={{ marginLeft: 8 }}>
+                            Current
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="price">
+                        {formatPrice(plan.priceUsdMonthly)}
+                        {paid ? <small> / mo</small> : null}
+                      </div>
+                      {plan.description ? (
+                        <p className="desc">{plan.description}</p>
+                      ) : null}
+                      <ul>
+                        {planFeatureBullets(plan).map((b) => (
+                          <li key={b}>{b}</li>
+                        ))}
+                      </ul>
+                      <div className="form-actions">
+                        {paid ? (
+                          <Button
+                            variant={current ? undefined : "primary"}
+                            disabled={subscribeBusy !== null || current}
+                            onClick={() => void subscribe(plan.slug)}
+                          >
+                            {subscribeBusy === plan.slug
+                              ? "Opening…"
+                              : current
+                                ? "Active"
+                                : `Subscribe ${plan.displayName}`}
+                          </Button>
+                        ) : (
+                          <Button
+                            disabled={subscribeBusy !== null || current}
+                            onClick={() => void subscribe(plan.slug)}
+                          >
+                            {current ? "On Free" : "Switch to Free"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="form-actions">
+                <Button
+                  variant="primary"
+                  disabled={subscribeBusy !== null}
+                  onClick={() => void subscribe("starter")}
+                >
+                  {subscribeBusy === "starter"
+                    ? "Opening…"
+                    : "Subscribe Starter"}
+                </Button>
+                <Button
+                  disabled={subscribeBusy !== null}
+                  onClick={() => void subscribe("pro")}
+                >
+                  {subscribeBusy === "pro" ? "Opening…" : "Subscribe Pro"}
+                </Button>
+              </div>
+            )}
           </Card>
         </div>
       )}

@@ -260,6 +260,23 @@ export interface SettingsResponse {
   notificationPreferences?: NotificationPrefRow[];
 }
 
+export interface MerchantPlan {
+  slug: string;
+  displayName: string;
+  description?: string | null;
+  priceUsdMonthly: number;
+  trialDays?: number;
+  maxMonitoredItems: number;
+  historyDays: number;
+  maxOpenIncidents: number;
+  aiReportsPerMonth: number;
+  advancedRules: boolean;
+  exportsEnabled: boolean;
+  teamWorkflows: boolean;
+  isFree?: boolean;
+  active?: boolean;
+}
+
 export interface BillingStatusResponse {
   planSlug?: string;
   billingStatus?: string;

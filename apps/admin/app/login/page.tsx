@@ -39,8 +39,9 @@ export default function LoginPage() {
         <BrandMark />
         <h1>Admin sign in</h1>
         <p>
-          Bundle Safety platform console. Use an AdminUser email and password
-          (bootstrap via ADMIN_BOOTSTRAP_SECRET).
+          Bundle Safety platform console. Set ADMIN_EMAIL, ADMIN_PASSWORD, and
+          ADMIN_JWT_SECRET in the monorepo root .env. The JWT is stored in the
+          browser and sent as x-stocksentry-admin-token.
         </p>
         {error ? <p className="err">{error}</p> : null}
         <div className="field">
