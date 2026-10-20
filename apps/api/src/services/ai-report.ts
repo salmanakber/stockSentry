@@ -5,16 +5,15 @@ import {
 } from "@stocksentry/database";
 import {
   AI_DEFAULTS,
-  AI_SYSTEM_PROMPT,
   ENTITLEMENT_ERROR_CODES,
   aiReportOutputSchema,
   canGenerateAiReport,
   fallbackAiReport,
-  getPlanEntitlements,
   requireShopId,
-  type AiReportOutput,
 } from "@stocksentry/shared";
 import { EntitlementError } from "./billing.js";
+import { generateWithFallback } from "./ai-providers.js";
+import { resolvePlan } from "./plans.js";
 
 function monthKey(d = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -42,7 +41,7 @@ async function ensureMonthlyQuota(shopId: string): Promise<{
     where: { shopId: id },
   });
   const aiSettings = (settings?.ai ?? {}) as { monthlyReportLimit?: number };
-  const plan = getPlanEntitlements(shop.planSlug);
+  const plan = await resolvePlan(shop.planSlug);
   const limit = aiSettings.monthlyReportLimit ?? plan.aiReportsPerMonth;
   const allowed = canGenerateAiReport(shop.planSlug, used, limit);
 
@@ -92,60 +91,6 @@ export async function buildEvidencePackage(incidentId: string) {
       content: n.content,
       createdAt: n.createdAt.toISOString(),
     })),
-  };
-}
-
-async function callOpenAi(
-  evidencePackage: unknown,
-): Promise<{ output: AiReportOutput; inputTokens?: number; outputTokens?: number }> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY_NOT_SET");
-  }
-
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: AI_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Explain this inventory incident using only the evidence JSON.\n\n${JSON.stringify(evidencePackage)}`,
-        },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`OPENAI_HTTP_${res.status}:${text.slice(0, 200)}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("OPENAI_EMPTY_CONTENT");
-
-  const raw = JSON.parse(content) as unknown;
-  const parsed = aiReportOutputSchema.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error("OPENAI_SCHEMA_INVALID");
-  }
-
-  return {
-    output: parsed.data,
-    inputTokens: data.usage?.prompt_tokens,
-    outputTokens: data.usage?.completion_tokens,
   };
 }
 
@@ -210,8 +155,14 @@ export async function generateAiReport(reportId: string): Promise<AiReport> {
   const evidenceVersion = evidencePackage.evidenceVersion;
 
   try {
-    const { output, inputTokens, outputTokens } =
-      await callOpenAi(evidencePackage);
+    const {
+      output,
+      inputTokens,
+      outputTokens,
+      provider,
+      model,
+    } = await generateWithFallback(evidencePackage);
+
     const validated = aiReportOutputSchema.parse({
       ...output,
       evidence_version: evidenceVersion,
@@ -221,6 +172,8 @@ export async function generateAiReport(reportId: string): Promise<AiReport> {
       where: { id: reportId },
       data: {
         status: "GENERATED",
+        provider,
+        model,
         outputJson: validated as unknown as Prisma.InputJsonValue,
         inputTokens: inputTokens ?? null,
         outputTokens: outputTokens ?? null,
@@ -243,12 +196,20 @@ export async function generateAiReport(reportId: string): Promise<AiReport> {
     const code =
       err instanceof Error ? err.message.slice(0, 64) : "AI_GENERATION_FAILED";
     const fallback = fallbackAiReport(evidenceVersion);
+    const noKeys =
+      code.includes("ALL_AI_PROVIDERS_FAILED") ||
+      code.includes("not configured");
 
     return prisma.aiReport.update({
       where: { id: reportId },
       data: {
-        status: code.includes("OPENAI_API_KEY") ? "FAILED" : "GENERATED",
-        outputJson: fallback as unknown as Prisma.InputJsonValue,
+        status: noKeys ? "FAILED" : "GENERATED",
+        provider: "fallback",
+        model: "deterministic",
+        outputJson: {
+          ...fallback,
+          _fallback: true,
+        } as unknown as Prisma.InputJsonValue,
         errorCode: code,
         generatedAt: new Date(),
         evidenceVersion,

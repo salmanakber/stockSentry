@@ -5,12 +5,15 @@ import {
 } from "@stocksentry/database";
 import {
   ENTITLEMENT_ERROR_CODES,
-  getPlanEntitlements,
   planSlugSchema,
   requireShopId,
   type PlanSlug,
 } from "@stocksentry/shared";
-import { merchantGraphqlRequest } from "../shopify/client.js";
+import {
+  getShopGraphqlClient,
+  merchantGraphqlRequest,
+} from "../shopify/client.js";
+import { resolvePlan } from "./plans.js";
 
 export class EntitlementError extends Error {
   readonly code: string;
@@ -73,6 +76,21 @@ const CURRENT_SUBSCRIPTIONS_QUERY = `#graphql
             }
           }
         }
+      }
+    }
+  }
+`;
+
+const APP_SUBSCRIPTION_CANCEL = `#graphql
+  mutation appSubscriptionCancel($id: ID!) {
+    appSubscriptionCancel(id: $id) {
+      appSubscription {
+        id
+        status
+      }
+      userErrors {
+        field
+        message
       }
     }
   }
@@ -157,7 +175,7 @@ export async function assertMonitoredItemCapacity(
 ): Promise<{ used: number; limit: number; planSlug: string }> {
   const id = requireShopId(shopId);
   const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
-  const plan = getPlanEntitlements(shop.planSlug);
+  const plan = await resolvePlan(shop.planSlug);
   const used = await countMonitoredItems(id);
   if (used + additional > plan.maxMonitoredItems) {
     throw new EntitlementError(
@@ -175,13 +193,13 @@ export async function assertMonitoredItemCapacity(
 export async function monitoredItemSoftLimit(shopId: string): Promise<number> {
   const id = requireShopId(shopId);
   const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
-  return getPlanEntitlements(shop.planSlug).maxMonitoredItems;
+  return (await resolvePlan(shop.planSlug)).maxMonitoredItems;
 }
 
 export async function getBillingStatus(shopId: string) {
   const id = requireShopId(shopId);
   const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
-  const plan = getPlanEntitlements(shop.planSlug);
+  const plan = await resolvePlan(shop.planSlug);
   const monitoredItems = await countMonitoredItems(id);
   const openIncidents = await prisma.incident.count({
     where: { shopId: id, status: { in: ["NEW", "INVESTIGATING"] } },
@@ -235,13 +253,16 @@ export async function createPlanSubscription(input: {
     );
   }
   const planSlug = parsed.data;
-  const plan = getPlanEntitlements(planSlug);
+  const plan = await resolvePlan(planSlug);
 
   if (planSlug === "free" || plan.priceUsdMonthly <= 0) {
+    const freePlan = await prisma.plan.findUnique({ where: { slug: "free" } });
     const shop = await prisma.shop.update({
       where: { id: shopId },
       data: {
         planSlug: "free",
+        planId: freePlan?.id ?? null,
+        planAssignedByAdmin: false,
         billingStatus: "NONE",
         shopifySubscriptionGid: null,
       },
@@ -266,7 +287,7 @@ export async function createPlanSubscription(input: {
     {
       name: `Bundle Safety ${plan.displayName}`,
       returnUrl: embeddedReturnUrl(input.shopDomain),
-      trialDays: 7,
+      trialDays: plan.trialDays ?? 7,
       test: testBilling,
       lineItems: [
         {
@@ -292,11 +313,14 @@ export async function createPlanSubscription(input: {
   const subscriptionId = payload?.appSubscription?.id ?? null;
   const confirmationUrl = payload?.confirmationUrl ?? null;
 
+  const planRow = await prisma.plan.findUnique({ where: { slug: planSlug } });
   const shop = await prisma.shop.update({
     where: { id: shopId },
     data: {
       // Plan activates after merchant confirms; keep requested slug pending.
       planSlug,
+      planId: planRow?.id ?? null,
+      planAssignedByAdmin: false,
       billingStatus: "TRIAL",
       shopifySubscriptionGid: subscriptionId,
     },
@@ -336,10 +360,12 @@ export async function reconcileSubscriptionStatus(input: {
     response.data?.currentAppInstallation?.activeSubscriptions ?? [];
 
   if (active.length === 0) {
+    const freePlan = await prisma.plan.findUnique({ where: { slug: "free" } });
     const shop = await prisma.shop.update({
       where: { id: shopId },
       data: {
         planSlug: "free",
+        planId: freePlan?.id ?? null,
         billingStatus: "NONE",
         shopifySubscriptionGid: null,
       },
@@ -357,11 +383,13 @@ export async function reconcileSubscriptionStatus(input: {
     planSlugFromSubscriptionName(primary.name) ??
     (await prisma.shop.findUniqueOrThrow({ where: { id: shopId } })).planSlug;
   const billingStatus = mapShopifyStatus(primary.status);
+  const planRow = await prisma.plan.findUnique({ where: { slug: mappedSlug } });
 
   const shop = await prisma.shop.update({
     where: { id: shopId },
     data: {
       planSlug: mappedSlug,
+      planId: planRow?.id ?? null,
       billingStatus,
       shopifySubscriptionGid: primary.id,
     },
@@ -377,6 +405,83 @@ export async function reconcileSubscriptionStatus(input: {
       status: s.status,
     })),
   };
+}
+
+/**
+ * Cancel Shopify app subscription(s) while the offline token still works.
+ * Prefer stored GID; also cancel any ACTIVE from currentAppInstallation.
+ */
+export async function cancelShopSubscriptions(
+  shopDomain: string,
+  shopifySubscriptionGid?: string | null,
+): Promise<{ cancelled: string[]; errors: string[] }> {
+  const cancelled: string[] = [];
+  const errors: string[] = [];
+
+  let client: Awaited<ReturnType<typeof getShopGraphqlClient>>;
+  try {
+    client = await getShopGraphqlClient(shopDomain);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[billing] cannot cancel subscriptions for ${shopDomain}: ${msg}`,
+    );
+    return { cancelled, errors: [msg] };
+  }
+
+  const ids = new Set<string>();
+  if (shopifySubscriptionGid) ids.add(shopifySubscriptionGid);
+
+  try {
+    const listed = (await client.request(CURRENT_SUBSCRIPTIONS_QUERY)) as {
+      data?: {
+        currentAppInstallation?: {
+          activeSubscriptions?: Array<{ id: string; status: string }>;
+        };
+      };
+    };
+    for (const sub of listed.data?.currentAppInstallation
+      ?.activeSubscriptions ?? []) {
+      if ((sub.status ?? "").toUpperCase() === "ACTIVE" || sub.id) {
+        ids.add(sub.id);
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`list: ${msg}`);
+  }
+
+  for (const id of ids) {
+    try {
+      const result = (await client.request(APP_SUBSCRIPTION_CANCEL, {
+        variables: { id },
+      })) as {
+        data?: {
+          appSubscriptionCancel?: {
+            appSubscription?: { id: string; status: string } | null;
+            userErrors?: Array<{ message: string }>;
+          };
+        };
+      };
+      const payload = result.data?.appSubscriptionCancel;
+      const userErrors = payload?.userErrors ?? [];
+      if (userErrors.length) {
+        errors.push(
+          `${id}: ${userErrors.map((e) => e.message).join("; ")}`,
+        );
+      } else {
+        cancelled.push(id);
+        console.info(
+          `[billing] cancelled subscription ${id} for ${shopDomain} status=${payload?.appSubscription?.status}`,
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`${id}: ${msg}`);
+    }
+  }
+
+  return { cancelled, errors };
 }
 
 /**

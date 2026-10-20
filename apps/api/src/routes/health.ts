@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   DETECTION_DEFAULTS,
   deriveMonitoringHealth,
-  getPlanEntitlements,
+  getStaticPlanEntitlements,
 } from "@stocksentry/shared";
 
 export const healthRouter = Router();
@@ -11,7 +11,7 @@ healthRouter.get("/health", (_req, res) => {
   res.json({
     ok: true,
     defaults: DETECTION_DEFAULTS,
-    samplePlan: getPlanEntitlements("starter"),
+    samplePlan: getStaticPlanEntitlements("starter"),
     sampleHealth: deriveMonitoringHealth({
       installationStatus: "INSTALLED",
       lastWebhookAt: new Date(),

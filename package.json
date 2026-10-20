@@ -8,11 +8,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @stocksentry/shared && npm run build -w @stocksentry/database && npm run build -w @stocksentry/api && npm run build -w @stocksentry/worker && npm run build -w @stocksentry/web",
+    "build": "npm run build -w @stocksentry/shared && npm run build -w @stocksentry/database && npm run build -w @stocksentry/api && npm run build -w @stocksentry/worker && npm run build -w @stocksentry/web && npm run build -w @stocksentry/admin",
     "dev": "npm run dev --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test -w @stocksentry/shared",
-    "typecheck": "npm run build -w @stocksentry/shared && npm run build -w @stocksentry/database && npm run lint -w @stocksentry/api && npm run typecheck -w @stocksentry/worker",
+    "typecheck": "npm run build -w @stocksentry/shared && npm run build -w @stocksentry/database && npm run lint -w @stocksentry/api && npm run typecheck -w @stocksentry/worker && npm run typecheck -w @stocksentry/web && npm run typecheck -w @stocksentry/admin",
     "db:generate": "npm run generate -w @stocksentry/database",
     "db:migrate": "npm run migrate -w @stocksentry/database",
     "db:push": "npm run push -w @stocksentry/database"

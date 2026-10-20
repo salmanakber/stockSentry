@@ -369,6 +369,16 @@ export default function SettingsPage() {
               title="Billing"
               subtitle="Current plan and subscription upgrades"
             />
+            {billing?.planSlug === "free" ? (
+              <div className="banner" role="status">
+                <div>
+                  <strong>Choose a plan to continue</strong>
+                  Your previous Shopify subscription was cancelled when the app
+                  was uninstalled. After reinstalling, Shopify requires you to
+                  select a plan again before paid features are available.
+                </div>
+              </div>
+            ) : null}
             <div className="facts" style={{ marginBottom: 16 }}>
               <div>
                 <small>Plan</small>

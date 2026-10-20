@@ -1,4 +1,5 @@
 import { prisma, shopRepository } from "@stocksentry/database";
+import { cancelShopSubscriptions } from "./billing.js";
 
 /**
  * GDPR shop/redact — wipe shop-scoped operational data while keeping a
@@ -32,11 +33,15 @@ export async function handleShopRedact(shopDomain: string): Promise<void> {
 
   await shopRepository.markUninstalled(shopDomain);
 
+  const freePlan = await prisma.plan.findUnique({ where: { slug: "free" } });
+
   // Clear residual billing / usage fields on the audit Shop row
   await prisma.shop.update({
     where: { id: shop.id },
     data: {
       planSlug: "free",
+      planId: freePlan?.id ?? null,
+      planAssignedByAdmin: false,
       billingStatus: "NONE",
       shopifySubscriptionGid: null,
       onboardingCompleted: false,
@@ -51,9 +56,49 @@ export async function handleShopRedact(shopDomain: string): Promise<void> {
 }
 
 /**
- * App uninstall — mark uninstalled and wipe sensitive operational data.
+ * App uninstall (Shopify App Store 1.2.2):
+ * 1. Cancel Shopify subscription(s) while offline token still works
+ * 2. Clear plan to free / billing NONE / GID null / planAssignedByAdmin false
+ * 3. Delete sessions
+ * 4. Wipe tenant data (same as redact)
  */
 export async function handleUninstall(shopDomain: string): Promise<void> {
+  const shop = await prisma.shop.findUnique({ where: { shopDomain } });
+  if (!shop) return;
+
+  // 1. Cancel subscription BEFORE deleting sessions / wiping token
+  try {
+    const result = await cancelShopSubscriptions(
+      shopDomain,
+      shop.shopifySubscriptionGid,
+    );
+    if (result.errors.length) {
+      console.warn(
+        `[compliance] subscription cancel warnings for ${shopDomain}:`,
+        result.errors.join("; "),
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[compliance] subscription cancel failed for ${shopDomain}`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // 2. Clear plan / billing while shop row still exists
+  const freePlan = await prisma.plan.findUnique({ where: { slug: "free" } });
+  await prisma.shop.update({
+    where: { id: shop.id },
+    data: {
+      planSlug: "free",
+      planId: freePlan?.id ?? null,
+      planAssignedByAdmin: false,
+      billingStatus: "NONE",
+      shopifySubscriptionGid: null,
+    },
+  });
+
+  // 3–4. Wipe tenant data + delete sessions (handleShopRedact)
   await handleShopRedact(shopDomain);
 }
 

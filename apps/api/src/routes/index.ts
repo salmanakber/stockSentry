@@ -14,6 +14,7 @@ import { billingRouter } from "./billing.js";
 /**
  * Authenticated REST surface. OAuth lives at /auth on the main app;
  * webhooks at POST /webhooks/shopify.
+ * Admin is mounted separately at /api/admin (before merchant auth).
  */
 export const apiRouter = Router();
 
@@ -49,6 +50,7 @@ apiRouter.get("/", (_req, res) => {
       billingStatus: "/api/v1/billing/status",
       billingSubscribe: "/api/v1/billing/subscribe",
       billingConfirm: "/api/v1/billing/confirm",
+      admin: "/api/admin",
       auth: "/auth",
       authCallback: "/auth/callback",
       authSession: "/auth/session",

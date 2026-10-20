@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { apiRouter } from "./routes/index.js";
+import { adminRouter } from "./routes/admin.js";
 import { authRouter, beginAuth } from "./routes/auth.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { attachMerchantAuth } from "./middleware/auth.js";
@@ -10,7 +11,7 @@ export function createApp() {
 
   app.use(
     cors({
-      origin: process.env.EMBEDDED_APP_URL ?? true,
+      origin: true,
       credentials: true,
     }),
   );
@@ -36,6 +37,9 @@ export function createApp() {
   // OAuth on main app (not only under /api)
   app.use("/auth", authRouter);
   app.get("/api/auth", beginAuth);
+
+  // Platform admin (JWT via x-stocksentry-admin-token) — before merchant auth
+  app.use("/api/admin", adminRouter);
 
   app.use("/api", attachMerchantAuth, apiRouter);
 

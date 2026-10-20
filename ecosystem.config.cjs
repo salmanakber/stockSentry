@@ -61,7 +61,22 @@ module.exports = {
       env: {
         ...rootEnv,
         NODE_ENV: "production",
-        PORT: rootEnv.WEB_PORT || rootEnv.PORT_WEB || 3000,
+        PORT: rootEnv.WEB_PORT || rootEnv.PORT_WEB || 6080,
+      },
+    },
+    {
+      name: "stocksentry-admin",
+      cwd: "./apps/admin",
+      script: "npm",
+      args: "run start",
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: "512M",
+      env: {
+        ...rootEnv,
+        NODE_ENV: "production",
+        PORT: rootEnv.ADMIN_PORT || 6082,
       },
     },
     {

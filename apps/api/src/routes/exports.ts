@@ -1,11 +1,9 @@
 import { Router } from "express";
 import { prisma, type Prisma } from "@stocksentry/database";
-import {
-  ENTITLEMENT_ERROR_CODES,
-  getPlanEntitlements,
-} from "@stocksentry/shared";
+import { ENTITLEMENT_ERROR_CODES } from "@stocksentry/shared";
 import { requireMerchant } from "../middleware/auth.js";
 import { enqueue, QUEUE_NAMES } from "../queues/index.js";
+import { resolvePlan } from "../services/plans.js";
 
 export const exportsRouter = Router();
 
@@ -13,7 +11,7 @@ exportsRouter.post("/exports", requireMerchant, async (req, res, next) => {
   try {
     const shopId = req.shopId!;
     const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
-    const plan = getPlanEntitlements(shop.planSlug);
+    const plan = await resolvePlan(shop.planSlug);
     if (!plan.exportsEnabled) {
       res.status(403).json({
         error: "exports_not_enabled",

@@ -7,10 +7,11 @@ export type PlanSlug = (typeof PLAN_SLUGS)[number];
 export const planSlugSchema = z.enum(PLAN_SLUGS);
 
 export type PlanEntitlements = {
-  slug: PlanSlug;
+  slug: string;
   displayName: string;
   /** Recurring USD price hypothesis for Shopify Billing stubs. Free = 0. */
   priceUsdMonthly: number;
+  trialDays?: number;
   maxMonitoredItems: number;
   historyDays: number;
   maxOpenIncidents: number;
@@ -18,6 +19,11 @@ export type PlanEntitlements = {
   advancedRules: boolean;
   exportsEnabled: boolean;
   teamWorkflows: boolean;
+  isFree?: boolean;
+  active?: boolean;
+  sortOrder?: number;
+  /** Set when loaded from Plan table. */
+  planId?: string;
 };
 
 /** Clear server-side entitlement error codes for API/UI handling. */
@@ -33,6 +39,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
     slug: "free",
     displayName: "Free / Trial",
     priceUsdMonthly: 0,
+    trialDays: 0,
     maxMonitoredItems: 100,
     historyDays: 14,
     maxOpenIncidents: 25,
@@ -40,11 +47,15 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
     advancedRules: false,
     exportsEnabled: false,
     teamWorkflows: false,
+    isFree: true,
+    active: true,
+    sortOrder: 0,
   },
   starter: {
     slug: "starter",
     displayName: "Starter",
     priceUsdMonthly: 19,
+    trialDays: 7,
     maxMonitoredItems: 1000,
     historyDays: 90,
     maxOpenIncidents: 200,
@@ -52,11 +63,15 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
     advancedRules: false,
     exportsEnabled: true,
     teamWorkflows: false,
+    isFree: false,
+    active: true,
+    sortOrder: 1,
   },
   pro: {
     slug: "pro",
     displayName: "Pro",
     priceUsdMonthly: 49,
+    trialDays: 7,
     maxMonitoredItems: 10000,
     historyDays: 365,
     maxOpenIncidents: 2000,
@@ -64,14 +79,67 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
     advancedRules: true,
     exportsEnabled: true,
     teamWorkflows: true,
+    isFree: false,
+    active: true,
+    sortOrder: 2,
   },
 };
 
-export function getPlanEntitlements(slug: string): PlanEntitlements {
+/** Sync static fallback — use when DB is unavailable. */
+export function getStaticPlanEntitlements(slug: string): PlanEntitlements {
   if (slug in PLAN_ENTITLEMENTS) {
     return PLAN_ENTITLEMENTS[slug as PlanSlug];
   }
   return PLAN_ENTITLEMENTS.free;
+}
+
+type PlanEntitlementsLoader = (
+  slug: string,
+) => Promise<PlanEntitlements | null>;
+
+let planLoader: PlanEntitlementsLoader | null = null;
+const planCache = new Map<string, { at: number; value: PlanEntitlements }>();
+const PLAN_CACHE_TTL_MS = 60_000;
+
+/** API registers a DB-backed loader at boot. */
+export function registerPlanEntitlementsLoader(
+  loader: PlanEntitlementsLoader,
+): void {
+  planLoader = loader;
+  planCache.clear();
+}
+
+export function clearPlanEntitlementsCache(): void {
+  planCache.clear();
+}
+
+/**
+ * Async entitlements lookup: in-memory cache → registered DB loader → static PLAN_ENTITLEMENTS.
+ */
+export async function getPlanEntitlements(
+  slug: string,
+): Promise<PlanEntitlements> {
+  const key = (slug || "free").toLowerCase();
+  const cached = planCache.get(key);
+  if (cached && Date.now() - cached.at < PLAN_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  if (planLoader) {
+    try {
+      const fromDb = await planLoader(key);
+      if (fromDb) {
+        planCache.set(key, { at: Date.now(), value: fromDb });
+        return fromDb;
+      }
+    } catch {
+      // fall through to static
+    }
+  }
+
+  const fallback = getStaticPlanEntitlements(key);
+  planCache.set(key, { at: Date.now(), value: fallback });
+  return fallback;
 }
 
 export function canGenerateAiReport(
@@ -79,7 +147,17 @@ export function canGenerateAiReport(
   usedThisMonth: number,
   overrideLimit?: number,
 ): boolean {
-  const plan = getPlanEntitlements(planSlug);
+  const plan = getStaticPlanEntitlements(planSlug);
+  const limit = overrideLimit ?? plan.aiReportsPerMonth;
+  return usedThisMonth < limit;
+}
+
+export async function canGenerateAiReportAsync(
+  planSlug: string,
+  usedThisMonth: number,
+  overrideLimit?: number,
+): Promise<boolean> {
+  const plan = await getPlanEntitlements(planSlug);
   const limit = overrideLimit ?? plan.aiReportsPerMonth;
   return usedThisMonth < limit;
 }

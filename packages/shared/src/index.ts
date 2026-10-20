@@ -1,6 +1,7 @@
 export * from "./defaults.js";
 export * from "./rules.js";
 export * from "./ai-schema.js";
+export * from "./ai-providers.js";
 export * from "./plans.js";
 export * from "./monitoring.js";
 export * from "./detection-math.js";

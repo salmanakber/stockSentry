@@ -14,7 +14,17 @@ export const shopRepository = {
         data: {
           installationStatus: "INSTALLED",
           uninstalledAt: null,
-          ...(isReinstall ? { installedAt: new Date() } : {}),
+          ...(isReinstall
+            ? {
+                installedAt: new Date(),
+                // Merchant must repurchase — never restore a paid plan from DB.
+                planSlug: "free",
+                planId: null,
+                planAssignedByAdmin: false,
+                billingStatus: "NONE",
+                shopifySubscriptionGid: null,
+              }
+            : {}),
         },
       });
     }
@@ -24,6 +34,8 @@ export const shopRepository = {
         shopDomain,
         installationStatus: "INSTALLED",
         installedAt: new Date(),
+        planSlug: "free",
+        billingStatus: "NONE",
       },
     });
   },
