@@ -62,7 +62,13 @@ npm run db:push
 npm run build
 ```
 
-## 4. PM2
+## 4. PM2 & environment loading
+
+Keep a single secrets file at the **monorepo root**: `/var/www/stockSentry/.env`.
+
+- `ecosystem.config.cjs` reads that file and injects keys into each PM2 app (PM2 has no native `env_file`).
+- `apps/api` and `apps/worker` also load the same root `.env` via dotenv at process start (cwd under PM2 is `apps/*`).
+- Next.js only auto-reads `apps/web/.env*`; root vars reach the web process through the ecosystem merge above. Rebuild after changing `NEXT_PUBLIC_*` keys.
 
 ```bash
 cd /var/www/stockSentry
@@ -75,42 +81,11 @@ pm2 startup
 
 ## 5. Nginx reverse proxy
 
+Full sample configs live in [`deploy/nginx.conf`](deploy/nginx.conf). Copy the option you need into `/etc/nginx/sites-available/`.
+
 ### Option A — two hostnames (recommended)
 
-```nginx
-# /etc/nginx/sites-available/stocksentry-api
-server {
-    listen 80;
-    server_name api.example.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        # Shopify webhooks need the raw body — do not buffer-transform it
-        proxy_request_buffering on;
-        client_max_body_size 2m;
-    }
-}
-
-# /etc/nginx/sites-available/stocksentry-web
-server {
-    listen 80;
-    server_name app.example.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+Use the `stocksentry-api` / `stocksentry-web` blocks in `deploy/nginx.conf` (proxy to `:4000` / `:3000`).
 
 Enable TLS with certbot after DNS points at the droplet.
 
@@ -118,56 +93,7 @@ Set Partner app URLs / redirects to these hosts. Webhook URI: `https://api.examp
 
 ### Option B — single host with path routing
 
-```nginx
-# /etc/nginx/sites-available/stocksentry
-server {
-    listen 80;
-    server_name stocksentry.example.com;
-
-    # API + OAuth + webhooks
-    location /api/ {
-        proxy_pass http://127.0.0.1:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /auth {
-        proxy_pass http://127.0.0.1:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /webhooks/ {
-        proxy_pass http://127.0.0.1:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /health {
-        proxy_pass http://127.0.0.1:4000;
-        proxy_set_header Host $host;
-    }
-
-    # Next.js UI (everything else)
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+Use the single-host block in `deploy/nginx.conf` (`/api/`, `/auth`, `/webhooks/`, `/health` → API; `/` → web).
 
 With path routing, set:
 

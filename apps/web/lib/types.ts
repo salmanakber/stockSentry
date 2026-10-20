@@ -141,5 +141,191 @@ export interface IncidentDetailResponse extends IncidentRow {
   aiReport?: {
     summary?: string;
     status?: string;
+    title?: string;
+    why_flagged?: string;
+    confirmed_facts?: string[];
+    possible_explanations?: string[];
+    recommended_checks?: string[];
+    unknowns?: string[];
+    confidence_note?: string;
   } | null;
+}
+
+export interface PaginatedMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface HistoryObservation {
+  id: string;
+  observedAt: string;
+  source: string;
+  quantity: number;
+  quantityName?: string;
+  dataQuality: string;
+  inventoryItem?: {
+    id?: string;
+    productTitle?: string | null;
+    variantTitle?: string | null;
+    sku?: string | null;
+  };
+  location?: { id?: string; name?: string };
+}
+
+export interface HistoryListResponse extends Partial<PaginatedMeta> {
+  items?: HistoryObservation[];
+}
+
+export interface ProductItem {
+  id: string;
+  productTitle?: string | null;
+  variantTitle?: string | null;
+  sku?: string | null;
+  observations?: Array<{
+    quantity?: number;
+    observedAt?: string;
+    location?: { id?: string; name?: string };
+  }>;
+}
+
+export interface ProductsListResponse extends Partial<PaginatedMeta> {
+  items?: ProductItem[];
+  locations?: Array<{ id: string; name: string; active?: boolean }>;
+}
+
+export interface BundleGroupItem {
+  id: string;
+  role: string;
+  inventoryItemId: string;
+  inventoryItem?: {
+    id?: string;
+    productTitle?: string | null;
+    variantTitle?: string | null;
+    sku?: string | null;
+  };
+}
+
+export interface BundleGroup {
+  id: string;
+  name: string;
+  description?: string | null;
+  active?: boolean;
+  relationshipSource?: string;
+  items?: BundleGroupItem[];
+}
+
+export interface BundlesListResponse {
+  items?: BundleGroup[];
+}
+
+export interface SettingsThresholds {
+  absoluteChangeThreshold?: number;
+  percentageChangeThreshold?: number;
+  minBaselineForPercentage?: number;
+  repeatedChangeWindowMinutes?: number;
+  duplicateSuppressionMinutes?: number;
+  reconciliationIntervalHours?: number;
+}
+
+export interface DetectionRuleRow {
+  id?: string;
+  ruleType: string;
+  enabled: boolean;
+  configuration?: unknown;
+}
+
+export interface NotificationPrefRow {
+  id?: string;
+  channel: "IN_APP" | "EMAIL" | "SLACK";
+  enabled: boolean;
+  minSeverity: string;
+  digestEnabled?: boolean;
+}
+
+export interface SettingsResponse {
+  shop?: {
+    planSlug?: string;
+    reconciliationIntervalHours?: number;
+    onboardingCompleted?: boolean;
+  };
+  settings?: {
+    thresholds?: SettingsThresholds | null;
+    monitoring?: unknown;
+    ai?: unknown;
+    retention?: unknown;
+  } | null;
+  detectionRules?: DetectionRuleRow[];
+  notificationPreferences?: NotificationPrefRow[];
+}
+
+export interface BillingStatusResponse {
+  planSlug?: string;
+  billingStatus?: string;
+  entitlements?: {
+    displayName?: string;
+    priceUsdMonthly?: number;
+    exportsEnabled?: boolean;
+    aiReportsPerMonth?: number;
+  };
+  usage?: {
+    monitoredItems?: number;
+    maxMonitoredItems?: number;
+    openIncidents?: number;
+    maxOpenIncidents?: number;
+    aiReportsUsed?: number;
+    aiReportsLimit?: number;
+  };
+}
+
+export interface NotificationDelivery {
+  id: string;
+  channel?: string;
+  status?: string;
+  destination?: string | null;
+  sentAt?: string | null;
+  createdAt?: string;
+  errorCode?: string | null;
+  incident?: {
+    id?: string;
+    type?: string;
+    severity?: string;
+    status?: string;
+    inventoryItem?: {
+      productTitle?: string | null;
+      variantTitle?: string | null;
+      sku?: string | null;
+    } | null;
+  } | null;
+}
+
+export interface NotificationsListResponse {
+  items?: NotificationDelivery[];
+}
+
+export interface ExportJob {
+  id: string;
+  exportType: string;
+  status: string;
+  resultUrl?: string | null;
+  errorCode?: string | null;
+  createdAt?: string;
+  completedAt?: string | null;
+}
+
+export interface ExportsListResponse {
+  items?: ExportJob[];
+}
+
+export interface OnboardingChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export interface OnboardingResponse {
+  completed?: boolean;
+  checklist?: OnboardingChecklistItem[];
+  progress?: { done: number; total: number };
 }

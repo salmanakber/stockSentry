@@ -98,3 +98,36 @@ export async function apiRequest<T = unknown>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+/** Authenticated binary/CSV download — triggers a browser save dialog. */
+export async function downloadAuthenticated(
+  path: string,
+  filename: string,
+  shop?: string,
+): Promise<void> {
+  const url = resolveUrl(path);
+  const send = async (forceRefresh = false) => {
+    const headers = await authHeaders(shop, forceRefresh);
+    return fetchWithTimeout(url, { headers: { Accept: "*/*", ...headers } });
+  };
+
+  let res = await send(false);
+  if (shouldRetrySession(res)) {
+    clearSessionTokenCache();
+    res = await send(true);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Download failed (${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}

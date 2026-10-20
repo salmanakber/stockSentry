@@ -14,14 +14,33 @@ import {
 
 const appUrl = process.env.APP_URL ?? "http://localhost:4000";
 
+/**
+ * Shopify library requires non-empty apiKey/apiSecret at init.
+ * Use explicit placeholders so the process can boot before Partner
+ * credentials are configured; real Auth/GraphQL still needs real keys.
+ */
+const shopifyApiKey =
+  process.env.SHOPIFY_API_KEY?.trim() || "UNSET_SHOPIFY_API_KEY";
+const shopifyApiSecret =
+  process.env.SHOPIFY_API_SECRET?.trim() || "UNSET_SHOPIFY_API_SECRET";
+
+if (
+  shopifyApiKey.startsWith("UNSET_") ||
+  shopifyApiSecret.startsWith("UNSET_")
+) {
+  console.warn(
+    "[shopify] SHOPIFY_API_KEY / SHOPIFY_API_SECRET not set — OAuth and Admin API calls will fail until configured.",
+  );
+}
+
 export const shopify: Shopify = shopifyApi({
-  apiKey: process.env.SHOPIFY_API_KEY ?? "",
-  apiSecretKey: process.env.SHOPIFY_API_SECRET ?? "",
+  apiKey: shopifyApiKey,
+  apiSecretKey: shopifyApiSecret,
   scopes: (
     process.env.SHOPIFY_SCOPES ??
     "read_inventory,read_products,read_locations"
   ).split(","),
-  hostName: appUrl.replace(/^https?:\/\//, ""),
+  hostName: appUrl.replace(/^https?:\/\//, "").replace(/\/$/, ""),
   hostScheme: appUrl.startsWith("https") ? "https" : "http",
   apiVersion: ApiVersion.January25,
   isEmbeddedApp: true,

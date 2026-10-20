@@ -1,5 +1,12 @@
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createBoss, QUEUE_NAMES, registerJobs, stopBoss } from "./boss.js";
+
+// Monorepo root `.env` (PM2 cwd is apps/worker; default dotenv would miss it)
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+loadEnv({ path: path.join(rootDir, ".env") });
+
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
