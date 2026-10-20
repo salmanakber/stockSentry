@@ -113,7 +113,9 @@ git pull origin main
 npm install
 npm run db:generate
 npm run db:push    # or migrate in production once migrations are locked
-npm run build
+# Do not `source .env` into the build shell if NODE_ENV=development there —
+# Next.js production build requires NODE_ENV=production.
+NODE_ENV=production npm run build
 pm2 reload ecosystem.config.cjs
 ```
 
