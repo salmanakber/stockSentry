@@ -1,8 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-name = "stocksentry"
-client_id = "YOUR_CLIENT_ID"
-application_url = "https://localhost:3000"
+name = "Bundle Safety"
+client_id = "e2da9638eba3325b99d27d1b3e07c7d8"
+application_url = "https://stocksentry.tidyflowapp.com"
 embedded = true
 
 [access_scopes]
@@ -10,12 +10,10 @@ scopes = "read_inventory,read_products,read_locations"
 
 [auth]
 redirect_urls = [
-  "https://localhost:4000/auth",
-  "https://localhost:4000/auth/callback",
-  "https://localhost:4000/api/auth",
-  "https://YOUR_PUBLIC_HOST/auth",
-  "https://YOUR_PUBLIC_HOST/auth/callback",
-  "https://YOUR_PUBLIC_HOST/api/auth"
+  "https://stocksentry.tidyflowapp.com/auth",
+  "https://stocksentry.tidyflowapp.com/auth/callback",
+  "https://stocksentry.tidyflowapp.com/api/auth",
+  "https://stocksentry.tidyflowapp.com/api/auth/callback"
 ]
 
 [webhooks]
