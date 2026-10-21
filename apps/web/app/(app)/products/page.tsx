@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "../../../components/Button";
 import { Card, CardTitle } from "../../../components/Card";
 import { Icon } from "../../../components/IconSprite";
@@ -149,7 +150,12 @@ export default function ProductsPage() {
               {items.map((item) => {
                 const last = item.observations?.[0];
                 return (
-                  <div className="list-row" key={item.id}>
+                  <Link
+                    className="list-row"
+                    key={item.id}
+                    href={`/products/${encodeURIComponent(item.id)}`}
+                    style={{ color: "inherit", textDecoration: "none" }}
+                  >
                     <div>
                       <b>{productTitle(item)}</b>
                       <div className="m mono">
@@ -165,7 +171,7 @@ export default function ProductsPage() {
                         <small>{last.location.name}</small>
                       ) : null}
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
               <div className="pager">

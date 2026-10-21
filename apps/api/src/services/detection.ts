@@ -14,8 +14,28 @@ import {
   exceedsPercentageThreshold,
   type DetectionRuleConfig,
 } from "@stocksentry/shared";
-import { createInAppNotification } from "./notify.js";
+import {
+  createEmailNotification,
+  createInAppNotification,
+} from "./notify.js";
 import { enqueue, QUEUE_NAMES } from "../queues/index.js";
+
+async function enqueuePendingDelivery(
+  delivery: { id: string; status: string } | null,
+  shopId: string,
+) {
+  if (delivery && delivery.status === "PENDING") {
+    await enqueue(QUEUE_NAMES.NOTIFY_DELIVER, {
+      deliveryId: delivery.id,
+      shopId,
+    }).catch(() => undefined);
+  }
+}
+
+/** HIGH/CRITICAL NEW incidents get email when EMAIL channel is configured. */
+function shouldEmailSeverity(severity: IncidentSeverity): boolean {
+  return severity === "HIGH" || severity === "CRITICAL";
+}
 
 export type EvaluateObservationContext = {
   shopId: string;
@@ -91,6 +111,9 @@ async function upsertIncident(input: {
 }): Promise<{ incident: Incident; created: boolean }> {
   const existing = await findOpenIncident(input.shopId, input.incidentKey);
   if (existing) {
+    const severityUpgraded =
+      shouldEmailSeverity(input.severity) &&
+      !shouldEmailSeverity(existing.severity);
     const incident = await prisma.incident.update({
       where: { id: existing.id },
       data: {
@@ -117,6 +140,14 @@ async function upsertIncident(input: {
         content: `Rule ${input.ruleType} matched again`,
       },
     });
+    if (severityUpgraded && incident.status === "NEW") {
+      const emailDelivery = await createEmailNotification({
+        shopId: input.shopId,
+        incidentId: incident.id,
+        severity: input.severity,
+      }).catch(() => null);
+      await enqueuePendingDelivery(emailDelivery, input.shopId);
+    }
     return { incident, created: false };
   }
 
@@ -162,12 +193,15 @@ async function upsertIncident(input: {
     incidentId: incident.id,
     severity: input.severity,
   }).catch(() => null);
+  await enqueuePendingDelivery(delivery, input.shopId);
 
-  if (delivery && delivery.status === "PENDING") {
-    await enqueue(QUEUE_NAMES.NOTIFY_DELIVER, {
-      deliveryId: delivery.id,
+  if (shouldEmailSeverity(input.severity)) {
+    const emailDelivery = await createEmailNotification({
       shopId: input.shopId,
-    }).catch(() => undefined);
+      incidentId: incident.id,
+      severity: input.severity,
+    }).catch(() => null);
+    await enqueuePendingDelivery(emailDelivery, input.shopId);
   }
 
   return { incident, created: true };

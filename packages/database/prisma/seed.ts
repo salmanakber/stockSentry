@@ -108,8 +108,124 @@ async function ensurePlans() {
   console.log(`[seed] upserted ${PLAN_SEEDS.length} plans`);
 }
 
+const EMAIL_TEMPLATE_SEEDS = [
+  {
+    key: "INCIDENT_ALERT" as const,
+    subject: "[StockSentry] {{severity}} alert — {{productTitle}}",
+    htmlBody: `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f4f6f5;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f5;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #dce5e1;">
+<tr><td style="background:#008060;padding:20px 28px;">
+  <div style="color:#ffffff;font-size:18px;font-weight:700;">StockSentry</div>
+  <div style="color:#d4f5eb;font-size:13px;margin-top:4px;">Inventory incident alert</div>
+</td></tr>
+<tr><td style="padding:28px;">
+  <p style="margin:0 0 12px;color:#1a1a1a;font-size:16px;font-weight:600;">{{incidentTitle}}</p>
+  <p style="margin:0 0 8px;color:#44554d;font-size:14px;"><strong>Shop:</strong> {{shopName}}</p>
+  <p style="margin:0 0 8px;color:#44554d;font-size:14px;"><strong>Product:</strong> {{productTitle}}</p>
+  <p style="margin:0 0 8px;color:#44554d;font-size:14px;"><strong>Severity:</strong> {{severity}}</p>
+  <p style="margin:0 0 16px;color:#44554d;font-size:14px;"><strong>Quantity delta:</strong> {{quantityDelta}}</p>
+  <p style="margin:0 0 20px;color:#44554d;font-size:14px;">{{summary}}</p>
+  <a href="{{incidentUrl}}" style="display:inline-block;background:#008060;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-size:14px;font-weight:600;">View incident</a>
+</td></tr>
+<tr><td style="padding:16px 28px;background:#f7faf8;color:#6b7c74;font-size:12px;">You receive this because email alerts are enabled in StockSentry.</td></tr>
+</table>
+</td></tr></table>
+</body></html>`,
+    textBody: `StockSentry incident alert
+
+{{incidentTitle}}
+Shop: {{shopName}}
+Product: {{productTitle}}
+Severity: {{severity}}
+Quantity delta: {{quantityDelta}}
+
+{{summary}}
+
+View: {{incidentUrl}}`,
+  },
+  {
+    key: "DIGEST" as const,
+    subject: "[StockSentry] Daily digest for {{shopName}}",
+    htmlBody: `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f4f6f5;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f5;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #dce5e1;">
+<tr><td style="background:#008060;padding:20px 28px;">
+  <div style="color:#ffffff;font-size:18px;font-weight:700;">StockSentry</div>
+  <div style="color:#d4f5eb;font-size:13px;margin-top:4px;">Daily digest</div>
+</td></tr>
+<tr><td style="padding:28px;">
+  <p style="margin:0 0 12px;color:#1a1a1a;font-size:16px;font-weight:600;">Digest for {{shopName}}</p>
+  <p style="margin:0;color:#44554d;font-size:14px;">{{summary}}</p>
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`,
+    textBody: `StockSentry daily digest for {{shopName}}
+
+{{summary}}`,
+  },
+  {
+    key: "TEST" as const,
+    subject: "[StockSentry] Test email for {{shopName}}",
+    htmlBody: `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f4f6f5;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f5;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #dce5e1;">
+<tr><td style="background:#008060;padding:20px 28px;">
+  <div style="color:#ffffff;font-size:18px;font-weight:700;">StockSentry</div>
+  <div style="color:#d4f5eb;font-size:13px;margin-top:4px;">Test delivery</div>
+</td></tr>
+<tr><td style="padding:28px;">
+  <p style="margin:0 0 12px;color:#1a1a1a;font-size:16px;font-weight:600;">Email delivery is working</p>
+  <p style="margin:0;color:#44554d;font-size:14px;">This is a test message for <strong>{{shopName}}</strong>. If you received it, your StockSentry email channel is configured correctly.</p>
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`,
+    textBody: `StockSentry test email for {{shopName}}
+
+Email delivery is working. Your email channel is configured correctly.`,
+  },
+] as const;
+
+async function ensureEmailTemplates() {
+  for (const tpl of EMAIL_TEMPLATE_SEEDS) {
+    const existing = await prisma.emailTemplate.findFirst({
+      where: { shopId: null, key: tpl.key },
+    });
+    if (existing) {
+      await prisma.emailTemplate.update({
+        where: { id: existing.id },
+        data: {
+          subject: tpl.subject,
+          htmlBody: tpl.htmlBody,
+          textBody: tpl.textBody,
+        },
+      });
+    } else {
+      await prisma.emailTemplate.create({
+        data: {
+          shopId: null,
+          key: tpl.key,
+          subject: tpl.subject,
+          htmlBody: tpl.htmlBody,
+          textBody: tpl.textBody,
+        },
+      });
+    }
+  }
+  console.log(`[seed] upserted ${EMAIL_TEMPLATE_SEEDS.length} system email templates`);
+}
+
 async function main() {
   await ensurePlans();
+  await ensureEmailTemplates();
 }
 
 main()

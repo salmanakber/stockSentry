@@ -15,6 +15,7 @@
     "@stocksentry/database": "*",
     "@stocksentry/shared": "*",
     "dotenv": "^16.4.7",
+    "nodemailer": "^10.1.7",
     "pg-boss": "^10.1.5",
     "zod": "^3.24.2"
   },

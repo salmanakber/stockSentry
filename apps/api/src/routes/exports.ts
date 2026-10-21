@@ -7,6 +7,20 @@ import { resolvePlan } from "../services/plans.js";
 
 export const exportsRouter = Router();
 
+function csvEscape(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function toCsv(headers: string[], rows: unknown[][]): string {
+  const lines = [
+    headers.map(csvEscape).join(","),
+    ...rows.map((r) => r.map(csvEscape).join(",")),
+  ];
+  return lines.join("\n") + "\n";
+}
+
 exportsRouter.post("/exports", requireMerchant, async (req, res, next) => {
   try {
     const shopId = req.shopId!;
@@ -54,7 +68,15 @@ exportsRouter.get("/exports", requireMerchant, async (req, res, next) => {
       orderBy: { createdAt: "desc" },
       take: 50,
     });
-    res.json({ items: jobs });
+    res.json({
+      items: jobs.map((j) => ({
+        ...j,
+        resultUrl:
+          j.status === "COMPLETED"
+            ? `/api/v1/exports/${j.id}/download`
+            : j.resultUrl,
+      })),
+    });
   } catch (err) {
     next(err);
   }
@@ -69,8 +91,130 @@ exportsRouter.get("/exports/:id", requireMerchant, async (req, res, next) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json(job);
+    res.json({
+      ...job,
+      resultUrl:
+        job.status === "COMPLETED"
+          ? `/api/v1/exports/${job.id}/download`
+          : job.resultUrl,
+    });
   } catch (err) {
     next(err);
   }
 });
+
+exportsRouter.get(
+  "/exports/:id/download",
+  requireMerchant,
+  async (req, res, next) => {
+    try {
+      const shopId = req.shopId!;
+      const job = await prisma.exportJob.findFirst({
+        where: { id: req.params.id, shopId },
+      });
+      if (!job) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      if (job.status !== "COMPLETED") {
+        res.status(409).json({
+          error: "not_ready",
+          status: job.status,
+          message: "Export is not completed yet.",
+        });
+        return;
+      }
+
+      const exportType = job.exportType;
+      let csv: string;
+      let filename: string;
+
+      if (exportType === "observations" || exportType === "history") {
+        const rows = await prisma.inventoryObservation.findMany({
+          where: { shopId },
+          orderBy: { observedAt: "desc" },
+          take: 10_000,
+          include: {
+            inventoryItem: {
+              select: { productTitle: true, variantTitle: true, sku: true },
+            },
+            location: { select: { name: true } },
+          },
+        });
+        csv = toCsv(
+          [
+            "observedAt",
+            "productTitle",
+            "variantTitle",
+            "sku",
+            "location",
+            "quantity",
+            "source",
+            "dataQuality",
+          ],
+          rows.map((r) => [
+            r.observedAt.toISOString(),
+            r.inventoryItem.productTitle,
+            r.inventoryItem.variantTitle,
+            r.inventoryItem.sku,
+            r.location.name,
+            r.quantity,
+            r.source,
+            r.dataQuality,
+          ]),
+        );
+        filename = `stocksentry-${exportType}-${job.id}.csv`;
+      } else {
+        const rows = await prisma.incident.findMany({
+          where: { shopId },
+          orderBy: { lastDetectedAt: "desc" },
+          take: 10_000,
+          include: {
+            inventoryItem: {
+              select: { productTitle: true, variantTitle: true, sku: true },
+            },
+            location: { select: { name: true } },
+          },
+        });
+        csv = toCsv(
+          [
+            "id",
+            "type",
+            "severity",
+            "status",
+            "ruleType",
+            "productTitle",
+            "variantTitle",
+            "sku",
+            "location",
+            "firstDetectedAt",
+            "lastDetectedAt",
+          ],
+          rows.map((r) => [
+            r.id,
+            r.type,
+            r.severity,
+            r.status,
+            r.ruleType,
+            r.inventoryItem?.productTitle,
+            r.inventoryItem?.variantTitle,
+            r.inventoryItem?.sku,
+            r.location?.name,
+            r.firstDetectedAt.toISOString(),
+            r.lastDetectedAt.toISOString(),
+          ]),
+        );
+        filename = `stocksentry-incidents-${job.id}.csv`;
+      }
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
+      res.send(csv);
+    } catch (err) {
+      next(err);
+    }
+  },
+);

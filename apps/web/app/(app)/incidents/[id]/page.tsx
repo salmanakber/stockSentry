@@ -238,6 +238,18 @@ export default function IncidentDetailPage() {
                 <span>Source</span>
                 <b className="ch">{data.source}</b>
               </div>
+              {data.inventoryItemId ? (
+                <div className="rw">
+                  <span>Product</span>
+                  <b>
+                    <Link
+                      href={`/products/${encodeURIComponent(data.inventoryItemId)}`}
+                    >
+                      View product report
+                    </Link>
+                  </b>
+                </div>
+              ) : null}
 
               <CardTitle
                 title="Actions"

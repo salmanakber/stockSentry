@@ -11,6 +11,7 @@ import { apiRequest } from "../../../lib/api";
 import type {
   BillingStatusResponse,
   DetectionRuleRow,
+  EmailTemplateRow,
   MerchantPlan,
   NotificationPrefRow,
   SettingsResponse,
@@ -22,6 +23,11 @@ import { useReveal } from "../../../hooks/useReveal";
 const SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 
 type PrefChannel = "IN_APP" | "EMAIL";
+
+type PrefState = Record<
+  PrefChannel,
+  { enabled: boolean; minSeverity: string; destinationRef: string }
+>;
 
 function num(v: unknown, fallback: number): number {
   const n = Number(v);
@@ -62,15 +68,19 @@ export default function SettingsPage() {
     duplicateSuppressionMinutes: 30,
   });
   const [rules, setRules] = useState<DetectionRuleRow[]>([]);
-  const [prefs, setPrefs] = useState<
-    Record<PrefChannel, { enabled: boolean; minSeverity: string }>
-  >({
-    IN_APP: { enabled: true, minSeverity: "MEDIUM" },
-    EMAIL: { enabled: false, minSeverity: "HIGH" },
+  const [prefs, setPrefs] = useState<PrefState>({
+    IN_APP: { enabled: true, minSeverity: "MEDIUM", destinationRef: "" },
+    EMAIL: { enabled: false, minSeverity: "HIGH", destinationRef: "" },
   });
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplateRow[]>([]);
+  const [activeTplKey, setActiveTplKey] = useState("INCIDENT_ALERT");
+  const [tplSubject, setTplSubject] = useState("");
+  const [tplHtml, setTplHtml] = useState("");
+  const [tplText, setTplText] = useState("");
   const [billing, setBilling] = useState<BillingStatusResponse | null>(null);
   const [plans, setPlans] = useState<MerchantPlan[]>([]);
   const [subscribeBusy, setSubscribeBusy] = useState<string | null>(null);
+  const [testBusy, setTestBusy] = useState(false);
 
   const applySettings = (res: SettingsResponse) => {
     setIntervalHours(
@@ -86,19 +96,30 @@ export default function SettingsPage() {
       duplicateSuppressionMinutes: num(t.duplicateSuppressionMinutes, 30),
     });
     setRules(res.detectionRules ?? []);
-    const next = {
-      IN_APP: { enabled: true, minSeverity: "MEDIUM" },
-      EMAIL: { enabled: false, minSeverity: "HIGH" },
+    const next: PrefState = {
+      IN_APP: { enabled: true, minSeverity: "MEDIUM", destinationRef: "" },
+      EMAIL: { enabled: false, minSeverity: "HIGH", destinationRef: "" },
     };
     for (const p of res.notificationPreferences ?? []) {
       if (p.channel === "IN_APP" || p.channel === "EMAIL") {
         next[p.channel] = {
           enabled: Boolean(p.enabled),
           minSeverity: p.minSeverity || "MEDIUM",
+          destinationRef: p.destinationRef ?? "",
         };
       }
     }
     setPrefs(next);
+    const tpls = res.emailTemplates ?? [];
+    setEmailTemplates(tpls);
+    const active =
+      tpls.find((x) => x.key === activeTplKey) ?? tpls[0] ?? null;
+    if (active) {
+      setActiveTplKey(active.key);
+      setTplSubject(active.subject);
+      setTplHtml(active.htmlBody);
+      setTplText(active.textBody);
+    }
   };
 
   const load = useCallback(async () => {
@@ -142,6 +163,10 @@ export default function SettingsPage() {
         channel,
         enabled: prefs[channel].enabled,
         minSeverity: prefs[channel].minSeverity,
+        destinationRef:
+          channel === "EMAIL"
+            ? prefs.EMAIL.destinationRef.trim() || null
+            : null,
       }));
 
       const res = await apiRequest<SettingsResponse>("/api/v1/settings", {
@@ -163,6 +188,60 @@ export default function SettingsPage() {
       showToast(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveTemplate = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await apiRequest(
+        `/api/v1/settings/email-templates/${encodeURIComponent(activeTplKey)}`,
+        {
+          method: "PUT",
+          shop,
+          body: JSON.stringify({
+            subject: tplSubject,
+            htmlBody: tplHtml,
+            textBody: tplText,
+          }),
+        },
+      );
+      showToast("Email template saved");
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Template save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    if (testBusy) return;
+    setTestBusy(true);
+    try {
+      await apiRequest("/api/v1/notifications/test-email", {
+        method: "POST",
+        shop,
+        body: JSON.stringify({
+          to: prefs.EMAIL.destinationRef.trim() || undefined,
+        }),
+      });
+      showToast("Test email sent (or queued)");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Test email failed");
+    } finally {
+      setTestBusy(false);
+    }
+  };
+
+  const selectTemplate = (key: string) => {
+    setActiveTplKey(key);
+    const t = emailTemplates.find((x) => x.key === key);
+    if (t) {
+      setTplSubject(t.subject);
+      setTplHtml(t.htmlBody);
+      setTplText(t.textBody);
     }
   };
 
@@ -386,8 +465,99 @@ export default function SettingsPage() {
                     ))}
                   </select>
                 </div>
+                {channel === "EMAIL" ? (
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label htmlFor="email-dest">Alert email address</label>
+                    <input
+                      id="email-dest"
+                      type="email"
+                      value={prefs.EMAIL.destinationRef}
+                      onChange={(e) =>
+                        setPrefs((p) => ({
+                          ...p,
+                          EMAIL: {
+                            ...p.EMAIL,
+                            destinationRef: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="ops@yourstore.com"
+                    />
+                  </div>
+                ) : null}
               </div>
             ))}
+            <div className="form-actions">
+              <Button
+                disabled={testBusy}
+                onClick={() => void sendTestEmail()}
+              >
+                {testBusy ? "Sending…" : "Send test email"}
+              </Button>
+            </div>
+          </Card>
+
+          <Card>
+            <CardTitle
+              title="Email templates"
+              subtitle="Override system defaults ({{shopName}}, {{incidentTitle}}, …)"
+            />
+            <div className="field">
+              <label htmlFor="tpl-key">Template</label>
+              <select
+                id="tpl-key"
+                value={activeTplKey}
+                onChange={(e) => selectTemplate(e.target.value)}
+              >
+                {(emailTemplates.length
+                  ? emailTemplates
+                  : [
+                      { key: "INCIDENT_ALERT" },
+                      { key: "DIGEST" },
+                      { key: "TEST" },
+                    ]
+                ).map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.key}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="tpl-subj">Subject</label>
+              <input
+                id="tpl-subj"
+                value={tplSubject}
+                onChange={(e) => setTplSubject(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="tpl-html">HTML body</label>
+              <textarea
+                id="tpl-html"
+                rows={8}
+                value={tplHtml}
+                onChange={(e) => setTplHtml(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="tpl-text">Text body</label>
+              <textarea
+                id="tpl-text"
+                rows={5}
+                value={tplText}
+                onChange={(e) => setTplText(e.target.value)}
+              />
+            </div>
+            <div className="form-actions">
+              <Button
+                variant="primary"
+                disabled={saving}
+                onClick={() => void saveTemplate()}
+              >
+                Save template
+              </Button>
+            </div>
           </Card>
 
           <Card>

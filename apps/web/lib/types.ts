@@ -64,6 +64,7 @@ export interface IncidentRow {
   statusColor?: string;
   detectedAt: string;
   evidence?: IncidentEvidence;
+  inventoryItemId?: string | null;
 }
 
 export interface ReviewOutcomes {
@@ -127,6 +128,10 @@ export interface OverviewResponse {
     name: string;
     role: string;
   } | null;
+  supplierRisk?: {
+    linkedItems?: number;
+    openIncidents?: number;
+  } | null;
 }
 
 export interface IncidentsListResponse {
@@ -183,6 +188,7 @@ export interface ProductItem {
   productTitle?: string | null;
   variantTitle?: string | null;
   sku?: string | null;
+  tracked?: boolean;
   observations?: Array<{
     quantity?: number;
     observedAt?: string;
@@ -193,6 +199,128 @@ export interface ProductItem {
 export interface ProductsListResponse extends Partial<PaginatedMeta> {
   items?: ProductItem[];
   locations?: Array<{ id: string; name: string; active?: boolean }>;
+}
+
+export interface ProductDetailResponse {
+  item: {
+    id: string;
+    productTitle?: string | null;
+    variantTitle?: string | null;
+    sku?: string | null;
+    tracked?: boolean;
+    shopifyInventoryItemGid?: string;
+    productGid?: string | null;
+    variantGid?: string | null;
+  };
+  locations?: Array<{
+    locationId: string;
+    name: string;
+    quantity: number | null;
+    lastObservedAt?: string | null;
+    source?: string | null;
+  }>;
+  history?: {
+    items?: Array<{
+      id: string;
+      quantity: number;
+      observedAt: string;
+      source: string;
+      dataQuality?: string;
+      location?: { id?: string; name?: string };
+    }>;
+    page?: number;
+    pageSize?: number;
+    total?: number;
+    totalPages?: number;
+  };
+  incidents?: {
+    open?: Array<{
+      id: string;
+      type?: string;
+      severity?: string;
+      status?: string;
+      lastDetectedAt?: string;
+      location?: { name?: string } | null;
+    }>;
+    recent?: Array<{
+      id: string;
+      type?: string;
+      severity?: string;
+      status?: string;
+      lastDetectedAt?: string;
+      location?: { name?: string } | null;
+    }>;
+  };
+  bundles?: Array<{
+    id: string;
+    name: string;
+    active?: boolean;
+    role?: string;
+  }>;
+  suppliers?: Array<{
+    id: string;
+    name: string;
+    contactEmail?: string | null;
+    leadTimeDays?: number | null;
+    active?: boolean;
+  }>;
+  stats?: {
+    incidentCount30d?: number;
+    absDeltaSum30d?: number;
+    lastChangeAt?: string | null;
+    openIncidentCount?: number;
+    monitoringHealth?: string;
+  };
+  productReport?: {
+    id: string;
+    status: string;
+    summaryJson?: Record<string, unknown> | null;
+    generatedAt?: string | null;
+    errorCode?: string | null;
+  } | null;
+}
+
+export interface SupplierListItem {
+  id: string;
+  name: string;
+  contactEmail?: string | null;
+  contactName?: string | null;
+  notes?: string | null;
+  leadTimeDays?: number | null;
+  active?: boolean;
+  itemCount?: number;
+  openIncidentCount?: number;
+}
+
+export interface SuppliersListResponse {
+  items?: SupplierListItem[];
+}
+
+export interface SupplierDetail extends SupplierListItem {
+  items?: Array<{
+    id: string;
+    inventoryItemId: string;
+    skuOverride?: string | null;
+    notes?: string | null;
+    inventoryItem?: ProductItem;
+  }>;
+  openIncidents?: Array<{
+    id: string;
+    type?: string;
+    severity?: string;
+    status?: string;
+    inventoryItem?: ProductItem | null;
+    location?: { name?: string } | null;
+  }>;
+}
+
+export interface EmailTemplateRow {
+  key: string;
+  subject: string;
+  htmlBody: string;
+  textBody: string;
+  isOverride?: boolean;
+  id?: string | null;
 }
 
 export interface BundleGroupItem {
@@ -242,6 +370,7 @@ export interface NotificationPrefRow {
   enabled: boolean;
   minSeverity: string;
   digestEnabled?: boolean;
+  destinationRef?: string | null;
 }
 
 export interface SettingsResponse {
@@ -258,6 +387,7 @@ export interface SettingsResponse {
   } | null;
   detectionRules?: DetectionRuleRow[];
   notificationPreferences?: NotificationPrefRow[];
+  emailTemplates?: EmailTemplateRow[];
 }
 
 export interface MerchantPlan {

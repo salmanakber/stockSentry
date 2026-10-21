@@ -200,6 +200,32 @@ export default function OverviewPage() {
           />
           <BundleRiskCard groups={data?.bundleRisk} loading={loading} />
           <AiReportsCard data={data?.aiReports} loading={loading} />
+          {(data?.supplierRisk?.openIncidents ?? 0) > 0 ||
+          (data?.supplierRisk?.linkedItems ?? 0) > 0 ? (
+            <div className="card rv">
+              <div className="ct">
+                <div>
+                  <b>Supplier-linked items at risk</b>
+                  <small>
+                    Open incidents on products attached to suppliers
+                  </small>
+                </div>
+                <Link href="/suppliers" className="btn">
+                  Suppliers
+                </Link>
+              </div>
+              <div className="facts" style={{ marginBottom: 0 }}>
+                <div>
+                  <small>Linked items</small>
+                  <b>{data?.supplierRisk?.linkedItems ?? 0}</b>
+                </div>
+                <div>
+                  <small>Open incidents</small>
+                  <b>{data?.supplierRisk?.openIncidents ?? 0}</b>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 

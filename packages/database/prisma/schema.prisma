@@ -91,6 +91,10 @@ model Shop {
   notificationPreferences NotificationPreference[]
   exportJobs              ExportJob[]
   shopSettings            ShopSettings?
+  suppliers               Supplier[]
+  supplierItems           SupplierItem[]
+  productReports          ProductReport[]
+  emailTemplates          EmailTemplate[]
 
   @@index([installationStatus])
   @@index([planSlug])
@@ -167,10 +171,12 @@ model InventoryItem {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  shop          Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  observations  InventoryObservation[]
-  incidents     Incident[]
-  bundleItems   BundleGroupItem[]
+  shop           Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  observations   InventoryObservation[]
+  incidents      Incident[]
+  bundleItems    BundleGroupItem[]
+  supplierItems  SupplierItem[]
+  productReports ProductReport[]
 
   @@unique([shopId, shopifyInventoryItemGid])
   @@index([shopId, productGid])
@@ -571,4 +577,98 @@ model ShopSettings {
   updatedAt  DateTime @updatedAt
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Suppliers
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id            String   @id @default(cuid())
+  shopId        String
+  name          String
+  contactEmail  String?
+  contactName   String?
+  notes         String?
+  leadTimeDays  Int?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  shop  Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items SupplierItem[]
+
+  @@index([shopId, active])
+  @@index([shopId, name])
+}
+
+model SupplierItem {
+  id              String   @id @default(cuid())
+  shopId          String
+  supplierId      String
+  inventoryItemId String
+  skuOverride     String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, inventoryItemId])
+  @@index([shopId, inventoryItemId])
+  @@index([shopId, supplierId])
+}
+
+// ---------------------------------------------------------------------------
+// Product-level AI reports (cached)
+// ---------------------------------------------------------------------------
+
+model ProductReport {
+  id              String        @id @default(cuid())
+  shopId          String
+  inventoryItemId String
+  evidenceVersion String
+  summaryJson     Json?
+  generatedAt     DateTime?
+  status          AiReportStatus @default(QUEUED)
+  provider        String?
+  model           String?
+  errorCode       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, inventoryItemId, evidenceVersion])
+  @@index([shopId, inventoryItemId, createdAt])
+  @@index([shopId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Email templates (null shopId = system default)
+// ---------------------------------------------------------------------------
+
+enum EmailTemplateKey {
+  INCIDENT_ALERT
+  DIGEST
+  TEST
+}
+
+model EmailTemplate {
+  id        String           @id @default(cuid())
+  shopId    String?
+  key       EmailTemplateKey
+  subject   String
+  htmlBody  String
+  textBody  String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  shop Shop? @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, key])
+  @@index([key])
 }

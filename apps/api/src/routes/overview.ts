@@ -37,6 +37,7 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
       bundleGroups,
       aiReports,
       pipelineStats,
+      supplierLinks,
     ] = await Promise.all([
       observationSourceBreakdown(shopId, 14),
       incidentTrendLastDays(shopId, 14),
@@ -102,7 +103,25 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
       }),
       aiReportUsageSummary(shopId),
       pipelineStatsLast24h(shopId),
+      prisma.supplierItem.findMany({
+        where: { shopId },
+        select: { inventoryItemId: true },
+      }),
     ]);
+
+    const supplierItemIds = [
+      ...new Set(supplierLinks.map((s) => s.inventoryItemId)),
+    ];
+    const supplierItemsAtRisk =
+      supplierItemIds.length === 0
+        ? 0
+        : await prisma.incident.count({
+            where: {
+              shopId,
+              inventoryItemId: { in: supplierItemIds },
+              status: { in: ["NEW", "INVESTIGATING"] },
+            },
+          });
 
     const repeatGroupsFiltered = repeatGroups.filter(
       (g) => g._count._all >= 3,
@@ -172,6 +191,10 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
       bundleRisk,
       aiReports,
       pipelineStats,
+      supplierRisk: {
+        linkedItems: supplierItemIds.length,
+        openIncidents: supplierItemsAtRisk,
+      },
     });
   } catch (err) {
     next(err);

@@ -50,6 +50,41 @@ export default function OnboardingPage() {
 
   useReveal(ready && !loading, null, [checklist, ready, loading]);
 
+  const runBaseline = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await apiRequest("/api/v1/onboarding/sync", {
+        method: "POST",
+        shop,
+        forceAuthRefresh: true,
+      });
+      showToast("Baseline sync enqueued");
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendTest = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await apiRequest("/api/v1/onboarding/test-notification", {
+        method: "POST",
+        shop,
+      });
+      showToast("Test notification recorded");
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Test failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const complete = async () => {
     if (busy) return;
     setBusy(true);
@@ -74,12 +109,12 @@ export default function OnboardingPage() {
         subtitle="Checklist to get StockSentry monitoring ready."
         actions={
           <>
-            <Link href="/products" className="btn">
-              Sync inventory
-            </Link>
-            <Link href="/settings" className="btn">
-              Settings
-            </Link>
+            <Button disabled={busy} onClick={() => void runBaseline()}>
+              Run baseline sync
+            </Button>
+            <Button disabled={busy} onClick={() => void sendTest()}>
+              Send test alert
+            </Button>
             <Button
               variant="primary"
               disabled={busy || completed}
@@ -125,11 +160,18 @@ export default function OnboardingPage() {
           </div>
         )}
         <div className="form-actions" style={{ marginTop: 18 }}>
-          <Link href="/products" className="btn p">
-            Run sync
-          </Link>
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() => void runBaseline()}
+          >
+            Run baseline sync
+          </Button>
+          <Button disabled={busy} onClick={() => void sendTest()}>
+            Send test notification
+          </Button>
           <Link href="/settings" className="btn">
-            Configure rules & notifications
+            Configure email & rules
           </Link>
         </div>
       </Card>

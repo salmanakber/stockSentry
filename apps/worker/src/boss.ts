@@ -4,7 +4,8 @@ import { runBaselineImport } from "../../api/src/services/inventory-import.js";
 import { runReconcile } from "../../api/src/services/reconcile.js";
 import { evaluateObservation } from "../../api/src/services/detection.js";
 import { generateAiReport } from "../../api/src/services/ai-report.js";
-import { deliverInAppNotification } from "../../api/src/services/notify.js";
+import { generateProductReport } from "../../api/src/services/product-report.js";
+import { deliverNotification } from "../../api/src/services/notify.js";
 import { prisma } from "@stocksentry/database";
 
 export const QUEUE_NAMES = {
@@ -13,6 +14,7 @@ export const QUEUE_NAMES = {
   INVENTORY_RECONCILE: "inventory.reconcile",
   DETECTION_EVALUATE: "detection.evaluate",
   AI_REPORT: "ai.report",
+  PRODUCT_REPORT: "product.report",
   NOTIFY_DELIVER: "notify.deliver",
   EXPORT_CSV: "export.csv",
 } as const;
@@ -114,11 +116,25 @@ export async function registerJobs(boss: PgBoss): Promise<void> {
     }
   });
 
+  await boss.work(QUEUE_NAMES.PRODUCT_REPORT, async (jobs) => {
+    for (const job of jobs) {
+      const data = job.data as { reportId: string };
+      const report = await generateProductReport(data.reportId);
+      console.log(`[worker] product.report`, job.id, report.status);
+    }
+  });
+
   await boss.work(QUEUE_NAMES.NOTIFY_DELIVER, async (jobs) => {
     for (const job of jobs) {
       const data = job.data as { deliveryId: string };
-      await deliverInAppNotification(data.deliveryId);
-      console.log(`[worker] notify.deliver`, job.id, data.deliveryId);
+      const result = await deliverNotification(data.deliveryId);
+      console.log(
+        `[worker] notify.deliver`,
+        job.id,
+        data.deliveryId,
+        result?.channel,
+        result?.status,
+      );
     }
   });
 
@@ -152,13 +168,13 @@ async function runExportJob(exportJobId: string, shopId: string) {
       rowCount = await prisma.incident.count({ where: { shopId } });
     }
 
-    // MVP: mark completed with a synthetic result URL (no object storage yet)
+    // CSV bytes are generated on download; mark ready with download path
     await prisma.exportJob.update({
       where: { id: job.id },
       data: {
         status: "COMPLETED",
         completedAt: new Date(),
-        resultUrl: `inline://${exportType}?rows=${rowCount}`,
+        resultUrl: `/api/v1/exports/${job.id}/download?rows=${rowCount}`,
         errorCode: null,
       },
     });

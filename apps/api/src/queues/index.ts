@@ -6,6 +6,7 @@ export const QUEUE_NAMES = {
   INVENTORY_RECONCILE: "inventory.reconcile",
   DETECTION_EVALUATE: "detection.evaluate",
   AI_REPORT: "ai.report",
+  PRODUCT_REPORT: "product.report",
   NOTIFY_DELIVER: "notify.deliver",
   EXPORT_CSV: "export.csv",
 } as const;
@@ -82,6 +83,12 @@ export type AiReportJob = {
   reportId: string;
   shopId: string;
   incidentId: string;
+};
+
+export type ProductReportJob = {
+  reportId: string;
+  shopId: string;
+  inventoryItemId: string;
 };
 
 export type NotifyDeliverJob = {

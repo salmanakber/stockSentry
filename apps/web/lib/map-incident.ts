@@ -17,10 +17,12 @@ export interface ApiIncident {
   firstDetectedAt?: string;
   lastDetectedAt?: string;
   inventoryItem?: {
+    id?: string;
     productTitle?: string | null;
     variantTitle?: string | null;
     sku?: string | null;
   } | null;
+  inventoryItemId?: string | null;
   location?: { name?: string | null } | null;
   evidence?: Array<{
     evidenceType?: string;
@@ -129,6 +131,7 @@ export function mapApiIncidentRow(raw: ApiIncident): IncidentRow {
     status: mapStatus(raw.status),
     detectedAt: formatWhen(raw.lastDetectedAt ?? raw.firstDetectedAt),
     evidence: mapEvidence(raw.evidence),
+    inventoryItemId: raw.inventoryItem?.id ?? raw.inventoryItemId ?? null,
   };
 }
 

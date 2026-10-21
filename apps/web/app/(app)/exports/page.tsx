@@ -7,7 +7,7 @@ import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { PageHeader } from "../../../components/shared/PageHeader";
-import { apiRequest } from "../../../lib/api";
+import { apiRequest, downloadAuthenticated } from "../../../lib/api";
 import type { ExportJob, ExportsListResponse } from "../../../lib/types";
 import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
@@ -71,6 +71,21 @@ export default function ExportsPage() {
         body: JSON.stringify({ exportType }),
       });
       showToast("Export job queued");
+      // Refresh until COMPLETED or timeout
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 800));
+        await load();
+        const res = await apiRequest<ExportsListResponse>("/api/v1/exports", {
+          shop,
+        }).catch(() => null);
+        const latest = res?.items?.[0];
+        if (
+          latest &&
+          (latest.status === "COMPLETED" || latest.status === "FAILED")
+        ) {
+          break;
+        }
+      }
       await load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Export failed";
@@ -81,6 +96,23 @@ export default function ExportsPage() {
       );
     } finally {
       setCreating(false);
+    }
+  };
+
+  const downloadJob = async (job: ExportJob) => {
+    try {
+      const path =
+        job.resultUrl?.startsWith("/api/")
+          ? job.resultUrl
+          : `/api/v1/exports/${encodeURIComponent(job.id)}/download`;
+      await downloadAuthenticated(
+        path,
+        `stocksentry-${job.exportType}-${job.id}.csv`,
+        shop,
+      );
+      showToast("Download started");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Download failed");
     }
   };
 
@@ -156,16 +188,13 @@ export default function ExportsPage() {
                       </td>
                       <td className="mono">{formatWhen(job.createdAt)}</td>
                       <td>
-                        {job.resultUrl ? (
-                          <a
-                            href={job.resultUrl}
-                            className="btn"
+                        {job.status === "COMPLETED" ? (
+                          <Button
                             style={{ padding: "6px 10px" }}
-                            target="_blank"
-                            rel="noreferrer"
+                            onClick={() => void downloadJob(job)}
                           >
                             Download
-                          </a>
+                          </Button>
                         ) : job.errorCode ? (
                           <span className="m">{job.errorCode}</span>
                         ) : (
