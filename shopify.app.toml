@@ -37,3 +37,6 @@ api_version = "2025-01"
 
 [pos]
 embedded = false
+
+[build]
+automatically_update_urls_on_dev = false
