@@ -52,6 +52,41 @@ billingRouter.get("/billing", requireMerchant, billingStatusHandler);
 /** Preferred status path. */
 billingRouter.get("/billing/status", requireMerchant, billingStatusHandler);
 
+/**
+ * Explicit Free selection — clears requiresPlanSelection without Shopify charge.
+ */
+billingRouter.post(
+  "/billing/select-free",
+  requireMerchant,
+  async (req, res, next) => {
+    try {
+      const result = await createPlanSubscription({
+        shopId: req.shopId!,
+        shopDomain: req.shop!,
+        sessionToken: req.sessionToken,
+        planSlug: "free",
+      });
+      res.json({
+        ok: true,
+        planSlug: result.planSlug,
+        billingStatus: result.billingStatus,
+        confirmationUrl: null,
+        message: "Free plan selected.",
+      });
+    } catch (err) {
+      if (err instanceof EntitlementError) {
+        res.status(400).json({
+          error: err.code.toLowerCase(),
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  },
+);
+
 billingRouter.post(
   "/billing/subscribe",
   requireMerchant,

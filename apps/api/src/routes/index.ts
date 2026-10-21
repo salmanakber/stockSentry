@@ -34,7 +34,7 @@ apiRouter.use("/v1", billingRouter);
 
 apiRouter.get("/", (_req, res) => {
   res.json({
-    name: "Bundle Safety API",
+    name: "StockSentry API",
     version: "v1",
     endpoints: {
       health: "/api/v1/health",
@@ -56,6 +56,7 @@ apiRouter.get("/", (_req, res) => {
       billing: "/api/v1/billing",
       billingStatus: "/api/v1/billing/status",
       billingSubscribe: "/api/v1/billing/subscribe",
+      billingSelectFree: "/api/v1/billing/select-free",
       billingConfirm: "/api/v1/billing/confirm",
       plans: "/api/v1/plans",
       admin: "/api/admin",

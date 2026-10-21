@@ -40,11 +40,11 @@ export function MonitoringStatusCard({
         <div>
           <div className="facts">
             <div>
-              <small>Last reconciliation</small>
+              <small>Last inventory verification</small>
               <b>—</b>
             </div>
             <div>
-              <small>Next reconciliation</small>
+              <small>Next inventory verification</small>
               <b>—</b>
             </div>
             <div>
@@ -53,8 +53,8 @@ export function MonitoringStatusCard({
             </div>
           </div>
           <p style={{ margin: "12px 0 0", color: "var(--mut)", fontSize: 13 }}>
-            Connect inventory webhooks and run an initial reconciliation to
-            populate this panel.
+            Connect inventory webhooks and run an initial inventory verification
+            to populate this panel.
           </p>
         </div>
       </Card>
@@ -89,11 +89,11 @@ export function MonitoringStatusCard({
       <div>
         <div className="facts">
           <div>
-            <small>Last reconciliation</small>
+            <small>Last inventory verification</small>
             <b id="lr">{lastRec}</b>
           </div>
           <div>
-            <small>Next (6 h interval)</small>
+            <small>Next verification</small>
             <b>{data.nextReconciliation ?? "—"}</b>
           </div>
           <div>

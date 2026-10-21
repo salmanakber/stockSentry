@@ -50,7 +50,7 @@ export function IncidentFilters({ value, onChange }: IncidentFiltersProps) {
       >
         <option value="">All sources</option>
         <option value="webhook">Webhook</option>
-        <option value="reconciliation">Reconciliation</option>
+        <option value="reconciliation">Inventory verification</option>
         <option value="baseline">Baseline</option>
         <option value="api">API read</option>
       </select>

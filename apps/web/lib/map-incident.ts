@@ -1,4 +1,4 @@
-import type { AiReportOutput } from "@stocksentry/shared";
+import { ruleTypeLabel, type AiReportOutput } from "@stocksentry/shared";
 import type {
   IncidentDetailResponse,
   IncidentEvidence,
@@ -125,7 +125,7 @@ export function mapApiIncidentRow(raw: ApiIncident): IncidentRow {
     title,
     subtitle: subtitle || raw.type || "—",
     quantity: "—",
-    rule: raw.ruleType?.replace(/_/g, " ") ?? raw.type ?? "Rule",
+    rule: ruleTypeLabel(raw.ruleType ?? raw.type),
     ruleDetail: raw.type,
     source: "—",
     status: mapStatus(raw.status),

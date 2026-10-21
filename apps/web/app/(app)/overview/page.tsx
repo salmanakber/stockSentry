@@ -19,7 +19,7 @@ import { AiReportsCard } from "../../../components/overview/AiReportsCard";
 import { DataPipeline } from "../../../components/overview/DataPipeline";
 import { apiRequest } from "../../../lib/api";
 import { getDemoOverview } from "../../../lib/demo-data";
-import type { OverviewResponse } from "../../../lib/types";
+import type { OnboardingResponse, OverviewResponse } from "../../../lib/types";
 import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
 import { healthLabel } from "../../../lib/format";
@@ -35,6 +35,7 @@ export default function OverviewPage() {
   const [fetching, setFetching] = useState(true);
   const [lastRecOverride, setLastRecOverride] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [showOnboardingBanner, setShowOnboardingBanner] = useState(false);
 
   const applyShell = useCallback(
     (ov: OverviewResponse | null) => {
@@ -65,8 +66,8 @@ export default function OverviewPage() {
           : "Monitoring",
         monitoringSub:
           ov.monitoring?.lastReconciliation != null
-            ? `Reconciled ${ov.monitoring.lastReconciliation}`
-            : "Awaiting first reconciliation",
+            ? `Verified ${ov.monitoring.lastReconciliation}`
+            : "Awaiting first inventory verification",
         planName: ov.plan?.name ?? "Plan",
         planUsage: ov.plan
           ? `${ov.plan.aiUsed} / ${ov.plan.aiLimit} AI reports`
@@ -113,6 +114,24 @@ export default function OverviewPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (demo) {
+      setShowOnboardingBanner(false);
+      return;
+    }
+    let cancelled = false;
+    void apiRequest<OnboardingResponse>("/api/v1/onboarding", { shop })
+      .then((res) => {
+        if (!cancelled) setShowOnboardingBanner(!res?.completed);
+      })
+      .catch(() => {
+        if (!cancelled) setShowOnboardingBanner(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, shop]);
+
   useReveal(ready && !fetching, null, [data, ready, fetching]);
 
   const onSync = async () => {
@@ -135,8 +154,8 @@ export default function OverviewPage() {
         )?.value;
       showToast(
         checked != null
-          ? `Reconciliation complete · ${checked.toLocaleString("en-US")} items checked`
-          : "Reconciliation complete",
+          ? `Inventory verification complete · ${checked.toLocaleString("en-US")} items checked`
+          : "Inventory verification complete",
       );
     } finally {
       setCardLoading(false);
@@ -175,6 +194,19 @@ export default function OverviewPage() {
           </>
         }
       />
+
+      {showOnboardingBanner ? (
+        <div className="banner acc" role="status">
+          <div style={{ flex: 1 }}>
+            <strong>Finish setup to get the most from StockSentry</strong>
+            Import your inventory baseline, confirm locations and rules, then
+            turn on notifications.
+          </div>
+          <Link href="/onboarding" className="btn p">
+            Continue setup
+          </Link>
+        </div>
+      ) : null}
 
       <MonitoringStatusCard
         data={data?.monitoring}

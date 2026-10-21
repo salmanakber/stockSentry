@@ -11,6 +11,7 @@ import { apiRequest } from "../../../lib/api";
 import type { BillingStatusResponse, MerchantPlan } from "../../../lib/types";
 import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
+import { refreshAppGates } from "../../../lib/gates";
 
 function formatPrice(usd: number): string {
   if (usd <= 0) return "$0";
@@ -85,6 +86,7 @@ export default function BillingPage() {
         window.open(res.confirmationUrl, "_top");
       } else {
         showToast(res.message ?? "Plan updated");
+        refreshAppGates();
         await load();
       }
     } catch (e) {

@@ -22,6 +22,8 @@ import type {
 } from "../../../lib/types";
 import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
+import { ruleTypeLabel } from "@stocksentry/shared";
+import { refreshAppGates } from "../../../lib/gates";
 
 const SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 
@@ -324,6 +326,7 @@ export default function SettingsPage() {
         window.open(res.confirmationUrl, "_top");
       } else {
         showToast(res.message ?? "Plan updated");
+        refreshAppGates();
         await load();
       }
     } catch (e) {
@@ -385,11 +388,13 @@ export default function SettingsPage() {
             <Card>
               <CardTitle
                 title="Monitoring"
-                subtitle="Reconciliation cadence and refill threshold"
+                subtitle="Inventory verification cadence and refill threshold"
               />
               <div className="field-row">
                 <div className="field">
-                  <label htmlFor="rec-hours">Reconciliation interval (hours)</label>
+                  <label htmlFor="rec-hours">
+                    Inventory verification interval (hours)
+                  </label>
                   <input
                     id="rec-hours"
                     type="number"
@@ -497,7 +502,7 @@ export default function SettingsPage() {
             <Card>
               <CardTitle
                 title="Detection rules"
-                subtitle="Toggle which deterministic rules can open incidents"
+                subtitle="Choose which rules can open incidents for review"
               />
               {!rules.length ? (
                 <EmptyState
@@ -521,7 +526,7 @@ export default function SettingsPage() {
                         )
                       }
                     />
-                    <span>{r.ruleType.replace(/_/g, " ")}</span>
+                    <span>{ruleTypeLabel(r.ruleType)}</span>
                   </label>
                 ))
               )}
@@ -651,7 +656,7 @@ export default function SettingsPage() {
             <Card>
               <CardTitle
                 title="AI reports"
-                subtitle="Evidence-based explanations for open incidents"
+                subtitle="Plain-language summaries of evidence already on an incident"
               />
               <div className="facts" style={{ marginBottom: 16 }}>
                 <div>
@@ -667,29 +672,11 @@ export default function SettingsPage() {
                   <small>Plan limit</small>
                   <b>{billing?.usage?.aiReportsLimit ?? "—"}</b>
                 </div>
-                <div>
-                  <small>Prompt version</small>
-                  <b>{String(aiSettings.promptVersion ?? "v1")}</b>
-                </div>
               </div>
               <p className="m" style={{ marginBottom: 12 }}>
                 AI reports summarize confirmed evidence already on an incident.
                 They never invent inventory facts or change Shopify quantities.
-                Provider API keys are managed in the StockSentry admin console.
               </p>
-              <div className="field">
-                <label htmlFor="ai-prompt">Prompt version note</label>
-                <input
-                  id="ai-prompt"
-                  value={String(aiSettings.promptVersion ?? "v1")}
-                  onChange={(e) =>
-                    setAiSettings((prev) => ({
-                      ...prev,
-                      promptVersion: e.target.value,
-                    }))
-                  }
-                />
-              </div>
             </Card>
           ) : null}
 
@@ -843,11 +830,14 @@ export default function SettingsPage() {
                 <Link href="/bundles" className="btn">
                   Bundle Groups
                 </Link>
-                {!onboardingCompleted ? (
-                  <Link href="/onboarding" className="btn p">
-                    Continue onboarding
-                  </Link>
-                ) : null}
+                <Link
+                  href="/onboarding"
+                  className={`btn${onboardingCompleted ? "" : " p"}`}
+                >
+                  {onboardingCompleted
+                    ? "Revisit setup checklist"
+                    : "Continue setup"}
+                </Link>
               </div>
             </Card>
           ) : null}

@@ -16,6 +16,28 @@ export type RuleType = (typeof RULE_TYPES)[number];
 
 export const ruleTypeSchema = z.enum(RULE_TYPES);
 
+/** Merchant-facing labels for detection rule types (keep backend IDs unchanged). */
+export const RULE_TYPE_LABELS: Record<RuleType, string> = {
+  LARGE_ABSOLUTE_CHANGE: "Large quantity drop",
+  LARGE_PERCENTAGE_CHANGE: "Large percent change",
+  REPEATED_CHANGES: "Repeated changes",
+  RECONCILIATION_DISCREPANCY: "Inventory verification mismatch",
+  STALE_MONITORING: "Stale monitoring",
+  BUNDLE_COMPONENT_RISK: "Bundle component risk",
+  REFILL_RISK: "Refill suggestion",
+  CUSTOM_THRESHOLD: "Custom threshold",
+};
+
+export function ruleTypeLabel(ruleType: string | null | undefined): string {
+  if (!ruleType) return "Rule";
+  if (ruleType in RULE_TYPE_LABELS) {
+    return RULE_TYPE_LABELS[ruleType as RuleType];
+  }
+  return ruleType.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) =>
+    c.toUpperCase(),
+  );
+}
+
 export const absoluteChangeConfigSchema = z.object({
   threshold: z.number().int().positive().default(DETECTION_DEFAULTS.absoluteChangeThreshold),
 });

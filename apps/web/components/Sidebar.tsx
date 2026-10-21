@@ -132,7 +132,7 @@ export function Sidebar({
 
   const planPct = meta.planPct ?? 0;
   const monitoringLabel = meta.monitoringLabel ?? "Monitoring";
-  const monitoringSub = meta.monitoringSub ?? "Awaiting first reconciliation";
+  const monitoringSub = meta.monitoringSub ?? "Awaiting first inventory verification";
   const planName = meta.planName ?? "Plan";
   const planUsage = meta.planUsage ?? "—";
   const userInitials = meta.userInitials ?? "?";

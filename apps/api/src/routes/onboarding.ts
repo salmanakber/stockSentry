@@ -23,8 +23,7 @@ onboardingRouter.get(
         ruleCount,
         prefCount,
         observationCount,
-        emailPref,
-        deliveryCount,
+        supplierCount,
       ] = await Promise.all([
         prisma.inventoryItem.count({
           where: { shopId, deletedAt: null },
@@ -35,10 +34,7 @@ onboardingRouter.get(
           where: { shopId, enabled: true },
         }),
         prisma.inventoryObservation.count({ where: { shopId } }),
-        prisma.notificationPreference.findUnique({
-          where: { shopId_channel: { shopId, channel: "EMAIL" } },
-        }),
-        prisma.notificationDelivery.count({ where: { shopId } }),
+        prisma.supplier.count({ where: { shopId } }),
       ]);
 
       const checklist = [
@@ -46,47 +42,47 @@ onboardingRouter.get(
           id: "installed",
           label: "App installed",
           done: shop.installationStatus === "INSTALLED",
+          optional: false,
         },
         {
           id: "baseline",
           label: "Inventory baseline imported",
           done: itemCount > 0 && observationCount > 0,
+          optional: false,
         },
         {
           id: "locations",
           label: "Locations discovered",
           done: locationCount > 0,
+          optional: false,
         },
         {
           id: "rules",
           label: "Detection rules enabled",
           done: ruleCount > 0,
+          optional: false,
         },
         {
           id: "notifications",
           label: "Notifications configured",
           done: prefCount > 0,
+          optional: false,
         },
         {
-          id: "test_alert",
-          label: "Test notification sent",
-          done:
-            deliveryCount > 0 ||
-            Boolean(emailPref?.destinationRef?.includes("@")),
-        },
-        {
-          id: "completed",
-          label: "Onboarding completed",
-          done: shop.onboardingCompleted,
+          id: "supplier",
+          label: "Add a supplier (optional)",
+          done: supplierCount > 0,
+          optional: true,
         },
       ];
 
+      const required = checklist.filter((c) => !c.optional);
       res.json({
         completed: shop.onboardingCompleted,
         checklist,
         progress: {
-          done: checklist.filter((c) => c.done).length,
-          total: checklist.length,
+          done: required.filter((c) => c.done).length,
+          total: required.length,
         },
       });
     } catch (err) {

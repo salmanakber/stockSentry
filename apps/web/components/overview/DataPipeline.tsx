@@ -16,7 +16,7 @@ export function DataPipeline({ nodes, loading = false }: DataPipelineProps) {
     <Card loading={loading}>
       <CardTitle
         title="Data pipeline · last 24 hours"
-        subtitle="From Shopify webhook to notification. Deterministic rules run before any AI."
+        subtitle="From Shopify webhook to notification. Detection rules run before any AI."
         action={<Link href="/settings">Monitoring settings</Link>}
       />
       {!nodes?.length ? (

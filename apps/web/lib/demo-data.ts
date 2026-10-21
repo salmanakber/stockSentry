@@ -12,7 +12,7 @@ export const DEMO_OVERVIEW: OverviewResponse = {
     lastWebhook: "38 s ago",
     sources: [
       { label: "Webhook", pct: 71, color: "var(--acc)" },
-      { label: "Reconciliation", pct: 19, color: "#2b6cb0" },
+      { label: "Inventory verification", pct: 19, color: "#2b6cb0" },
       { label: "API read", pct: 8, color: "#c2680a" },
       { label: "Baseline", pct: 2, color: "#98a2b3" },
     ],
@@ -158,7 +158,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     detectedAt: "1 h ago",
     evidence: {
       confirmed:
-        "Last webhook observation was 214 at 07:12. Reconciliation at 09:55 read 96 from Shopify.",
+        "Last webhook observation was 214 at 07:12. Inventory verification at 09:55 read 96 from Shopify.",
       unknown:
         "Every change between 07:12 and 09:55. This is an observed discrepancy, not a confirmed transition.",
       suggested:
@@ -195,7 +195,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     subtitle: "CER-MUG-SG · Retail Store",
     quantity: "57 vs 42",
     quantityDelta: "observed mismatch",
-    rule: "Reconciliation discrepancy",
+    rule: "Inventory verification mismatch",
     ruleDetail: "v2 · any mismatch",
     source: "reconciliation",
     status: "investigating",
@@ -203,7 +203,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     detectedAt: "Yesterday",
     evidence: {
       confirmed:
-        "Last observed 57 (webhook, 18:20). Shopify current 42 at the 06:00 reconciliation.",
+        "Last observed 57 (webhook, 18:20). Shopify current 42 at the 06:00 inventory verification.",
       unknown:
         "No events were received in between. The timing and cause of the change.",
       suggested: "Compare against POS sessions at Retail Store.",

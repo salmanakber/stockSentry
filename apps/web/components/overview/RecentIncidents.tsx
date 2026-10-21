@@ -19,7 +19,7 @@ export function RecentIncidents({
     <Card loading={loading}>
       <CardTitle
         title="Recent suspicious changes"
-        subtitle="Flagged by deterministic rules. A flag is not proof of an error."
+        subtitle="Flagged by monitoring rules. A flag is not proof of an error."
         action={<Link href="/incidents">All incidents</Link>}
       />
       {!items?.length ? (

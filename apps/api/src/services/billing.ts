@@ -288,7 +288,7 @@ export async function createPlanSubscription(input: {
     input.sessionToken,
     APP_SUBSCRIPTION_CREATE,
     {
-      name: `Bundle Safety ${plan.displayName}`,
+      name: `StockSentry ${plan.displayName}`,
       returnUrl: embeddedReturnUrl(input.shopDomain),
       trialDays: plan.trialDays ?? 7,
       test: testBilling,

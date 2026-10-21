@@ -37,6 +37,8 @@ export const shopRepository = {
         installedAt: new Date(),
         planSlug: "free",
         billingStatus: "NONE",
+        // Merchant must choose Free or paid before using the app.
+        requiresPlanSelection: true,
       },
     });
   },

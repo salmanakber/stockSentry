@@ -78,7 +78,7 @@ export default function ProductsPage() {
         shop,
         forceAuthRefresh: true,
       });
-      showToast("Sync enqueued — baseline and reconcile jobs queued");
+      showToast("Inventory sync started");
       await load();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Sync failed");

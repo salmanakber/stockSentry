@@ -18,7 +18,7 @@ const SOURCES = [
   { value: "BASELINE", label: "Baseline" },
   { value: "WEBHOOK", label: "Webhook" },
   { value: "API_READ", label: "API read" },
-  { value: "RECONCILIATION", label: "Reconciliation" },
+  { value: "RECONCILIATION", label: "Inventory verification" },
 ];
 
 function formatWhen(iso: string): string {
@@ -134,7 +134,7 @@ export default function HistoryPage() {
           <EmptyState
             icon="hi"
             title="No history yet"
-            description="Inventory observations from webhooks and reconciliations will appear here once monitoring is active."
+            description="Inventory observations from webhooks and scheduled verification will appear here once monitoring is active."
           />
         ) : (
           <>

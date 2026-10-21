@@ -520,6 +520,7 @@ export interface OnboardingChecklistItem {
   id: string;
   label: string;
   done: boolean;
+  optional?: boolean;
 }
 
 export interface OnboardingResponse {

@@ -48,6 +48,7 @@ export async function handleShopRedact(shopDomain: string): Promise<void> {
       planAssignedByAdmin: false,
       billingStatus: "NONE",
       shopifySubscriptionGid: null,
+      requiresPlanSelection: true,
       onboardingCompleted: false,
       lastWebhookAt: null,
       lastReconciledAt: null,
@@ -89,7 +90,7 @@ export async function handleUninstall(shopDomain: string): Promise<void> {
     );
   }
 
-  // 2. Clear plan / billing while shop row still exists
+  // 2. Clear plan / billing while shop row still exists — next install must re-pick
   const freePlan = await prisma.plan.findUnique({ where: { slug: "free" } });
   await prisma.shop.update({
     where: { id: shop.id },
@@ -99,6 +100,7 @@ export async function handleUninstall(shopDomain: string): Promise<void> {
       planAssignedByAdmin: false,
       billingStatus: "NONE",
       shopifySubscriptionGid: null,
+      requiresPlanSelection: true,
     },
   });
 
