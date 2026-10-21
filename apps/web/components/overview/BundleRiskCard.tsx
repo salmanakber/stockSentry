@@ -20,14 +20,14 @@ export function BundleRiskCard({
     <Card hover loading={loading}>
       <CardTitle
         title="Bundle components at risk"
-        subtitle="Mapped components with open incidents"
+        subtitle="Open incidents or refill-threshold components"
         action={<Link href="/bundles">Groups</Link>}
       />
       {!groups?.length ? (
         <EmptyState
           icon="bu"
           title="No bundle risk signals"
-          description="Map bundle groups to see which components currently have open incidents."
+          description="Map bundle groups to see which components have open incidents or low observed quantity."
         />
       ) : (
         groups.map((g) => (
@@ -37,15 +37,21 @@ export function BundleRiskCard({
               <span className="chip">{g.mapping}</span>
             </div>
             <div className="pl">
-              {g.components.map((c) => {
+              {(g.components ?? []).map((c) => {
                 const cIdx = chipIndex++;
                 return (
                   <i
                     key={c.name}
                     className={c.atRisk ? "r" : undefined}
                     style={{ ["--c" as string]: cIdx }}
+                    title={
+                      c.refillAtRisk
+                        ? `Refill risk${c.quantity != null ? ` · qty ${c.quantity}` : ""}`
+                        : undefined
+                    }
                   >
                     {c.name}
+                    {c.refillAtRisk ? " · refill" : ""}
                   </i>
                 );
               })}

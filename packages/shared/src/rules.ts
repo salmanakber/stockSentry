@@ -8,6 +8,7 @@ export const RULE_TYPES = [
   "RECONCILIATION_DISCREPANCY",
   "STALE_MONITORING",
   "BUNDLE_COMPONENT_RISK",
+  "REFILL_RISK",
   "CUSTOM_THRESHOLD",
 ] as const;
 
@@ -120,6 +121,16 @@ export function defaultRuleConfigurations(): Record<
       enabled: true,
       version: 1,
       configuration: {
+        suppression: {
+          windowMinutes: DETECTION_DEFAULTS.duplicateSuppressionMinutes,
+        },
+      },
+    },
+    REFILL_RISK: {
+      enabled: true,
+      version: 1,
+      configuration: {
+        absolute: { threshold: DETECTION_DEFAULTS.refillThreshold },
         suppression: {
           windowMinutes: DETECTION_DEFAULTS.duplicateSuppressionMinutes,
         },

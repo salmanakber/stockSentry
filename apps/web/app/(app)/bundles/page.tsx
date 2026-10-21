@@ -272,8 +272,19 @@ export default function BundlesPage() {
                   <div className="chip-row pl in">
                     {(g.items ?? []).length ? (
                       (g.items ?? []).map((it) => (
-                        <i className="chip" key={it.id}>
+                        <i
+                          className={`chip${it.refillAtRisk ? " hot" : ""}`}
+                          key={it.id}
+                          title={
+                            it.refillAtRisk
+                              ? `Refill risk · qty ${it.quantity ?? "—"} ≤ ${it.refillThreshold ?? 10}`
+                              : undefined
+                          }
+                        >
                           {itemLabel(it.inventoryItem)} · {it.role}
+                          {it.refillAtRisk
+                            ? ` · refill (qty ${it.quantity ?? "—"})`
+                            : ""}
                           <button
                             type="button"
                             aria-label="Remove item"

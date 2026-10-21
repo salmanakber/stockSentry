@@ -1,6 +1,7 @@
 import {
   prisma,
   type DeliveryStatus,
+  type EmailTemplateKey,
   type IncidentSeverity,
 } from "@stocksentry/database";
 import { appBaseUrl, sendTemplatedEmail } from "./email.js";
@@ -17,6 +18,14 @@ function meetsMinSeverity(
   minSeverity: IncidentSeverity,
 ): boolean {
   return SEVERITY_RANK[severity] >= SEVERITY_RANK[minSeverity];
+}
+
+export function isHighOrCritical(severity: IncidentSeverity): boolean {
+  return severity === "HIGH" || severity === "CRITICAL";
+}
+
+export function isMediumOrAbove(severity: IncidentSeverity): boolean {
+  return SEVERITY_RANK[severity] >= SEVERITY_RANK.MEDIUM;
 }
 
 export async function createInAppNotification(input: {
@@ -69,13 +78,15 @@ export async function createInAppNotification(input: {
 }
 
 /**
- * Create an EMAIL delivery when pref enabled + destination email set.
- * Intended for NEW / HIGH+ incidents (caller filters severity).
+ * Create an EMAIL delivery.
+ * - Default: pref enabled + min severity + destination.
+ * - forceIfDestination: HIGH/CRITICAL — attempt when destination is set even if channel disabled.
  */
 export async function createEmailNotification(input: {
   shopId: string;
   incidentId: string;
   severity: IncidentSeverity;
+  forceIfDestination?: boolean;
 }): Promise<{ id: string; status: DeliveryStatus } | null> {
   const pref = await prisma.notificationPreference.findUnique({
     where: {
@@ -83,26 +94,36 @@ export async function createEmailNotification(input: {
     },
   });
 
-  if (!pref || !pref.enabled) {
+  const to = pref?.destinationRef?.trim() ?? "";
+  const hasDestination = Boolean(to && to.includes("@"));
+
+  if (!pref) {
     return null;
   }
 
-  if (!meetsMinSeverity(input.severity, pref.minSeverity)) {
-    return prisma.notificationDelivery.create({
-      data: {
-        shopId: input.shopId,
-        incidentId: input.incidentId,
-        channel: "EMAIL",
-        destination: pref.destinationRef,
-        status: "SUPPRESSED",
-        errorCode: "below_min_severity",
-      },
-      select: { id: true, status: true },
-    });
+  if (!pref.enabled && !(input.forceIfDestination && hasDestination)) {
+    return null;
   }
 
-  const to = pref.destinationRef?.trim();
-  if (!to || !to.includes("@")) {
+  if (!meetsMinSeverity(input.severity, pref.minSeverity ?? "MEDIUM")) {
+    // HIGH/CRITICAL force still respects min severity only when not forcing;
+    // when forcing, skip min-severity gate if destination exists.
+    if (!(input.forceIfDestination && hasDestination)) {
+      return prisma.notificationDelivery.create({
+        data: {
+          shopId: input.shopId,
+          incidentId: input.incidentId,
+          channel: "EMAIL",
+          destination: pref.destinationRef,
+          status: "SUPPRESSED",
+          errorCode: "below_min_severity",
+        },
+        select: { id: true, status: true },
+      });
+    }
+  }
+
+  if (!hasDestination) {
     return prisma.notificationDelivery.create({
       data: {
         shopId: input.shopId,
@@ -147,6 +168,57 @@ export async function deliverInAppNotification(deliveryId: string) {
   });
 }
 
+function extractQtyFields(payload: unknown): {
+  previousQuantity: string;
+  currentQuantity: string;
+  quantityDelta: string;
+  whyFlagged: string;
+} {
+  const p = (payload ?? {}) as Record<string, unknown>;
+  const prev =
+    p.previousQuantity != null
+      ? String(p.previousQuantity)
+      : p.expectedFromLastObservation != null
+        ? String(p.expectedFromLastObservation)
+        : "—";
+  const curr =
+    p.currentQuantity != null
+      ? String(p.currentQuantity)
+      : p.shopifyQuantity != null
+        ? String(p.shopifyQuantity)
+        : p.quantity != null
+          ? String(p.quantity)
+          : "—";
+  let delta = "—";
+  if (p.absoluteDelta != null) delta = String(p.absoluteDelta);
+  else if (p.delta != null) delta = String(p.delta);
+  else if (
+    typeof p.previousQuantity === "number" &&
+    typeof p.currentQuantity === "number"
+  ) {
+    delta = String(p.currentQuantity - p.previousQuantity);
+  }
+
+  const whyParts: string[] = [];
+  if (p.threshold != null) whyParts.push(`threshold ${p.threshold}`);
+  if (p.percentThreshold != null)
+    whyParts.push(`percent threshold ${p.percentThreshold}%`);
+  if (p.refillThreshold != null)
+    whyParts.push(`refill threshold ${p.refillThreshold}`);
+  if (p.changeCount != null) whyParts.push(`${p.changeCount} changes in window`);
+  if (p.openIncidentsOnComponent != null)
+    whyParts.push(`${p.openIncidentsOnComponent} open component incidents`);
+
+  return {
+    previousQuantity: prev,
+    currentQuantity: curr,
+    quantityDelta: delta,
+    whyFlagged: whyParts.length
+      ? `Flagged because observed evidence met: ${whyParts.join(", ")}.`
+      : "Flagged by a StockSentry detection rule based on observed quantity evidence.",
+  };
+}
+
 export async function deliverEmailNotification(deliveryId: string) {
   const delivery = await prisma.notificationDelivery.findUnique({
     where: { id: deliveryId },
@@ -187,21 +259,22 @@ export async function deliverEmailNotification(deliveryId: string) {
         .join(" · ") || "Unknown product"
     : "Unknown product";
 
-  const payload = incident?.evidence?.[0]?.evidencePayload as
-    | { delta?: number; previousQuantity?: number; quantity?: number }
-    | null
-    | undefined;
-  const quantityDelta =
-    payload?.delta != null
-      ? String(payload.delta)
-      : payload?.previousQuantity != null && payload?.quantity != null
-        ? String(payload.quantity - payload.previousQuantity)
-        : "—";
+  const qty = extractQtyFields(incident?.evidence?.[0]?.evidencePayload);
+  const locationName = incident?.location?.name ?? "unknown location";
+  const isRefill =
+    incident?.type === "REFILL_RISK" || incident?.ruleType === "REFILL_RISK";
+  const templateKey: EmailTemplateKey = isRefill
+    ? "REFILL_ALERT"
+    : "INCIDENT_ALERT";
+
+  const summary = isRefill
+    ? `Observed quantity at ${locationName} may need a refill. StockSentry suggests review only — it will not change inventory.`
+    : `Unusual inventory change detected at ${locationName} (rule ${incident?.ruleType ?? "unknown"}). Confirmed facts are limited to observed quantities; possible causes are not confirmed.`;
 
   const result = await sendTemplatedEmail({
     shopId: delivery.shopId,
     to,
-    key: "INCIDENT_ALERT",
+    key: templateKey,
     vars: {
       shopName: delivery.shop.shopDomain,
       incidentTitle: incident
@@ -209,11 +282,24 @@ export async function deliverEmailNotification(deliveryId: string) {
         : "Incident alert",
       severity: incident?.severity ?? "UNKNOWN",
       productTitle,
-      quantityDelta,
+      locationName,
+      previousQuantity: qty.previousQuantity,
+      currentQuantity: qty.currentQuantity,
+      quantityDelta: qty.quantityDelta,
+      quantityBeforeAfter:
+        qty.previousQuantity !== "—" || qty.currentQuantity !== "—"
+          ? `${qty.previousQuantity} → ${qty.currentQuantity}`
+          : qty.quantityDelta,
+      whyFlagged: qty.whyFlagged,
+      confirmedNote:
+        "Confirmed: observed quantities and detection thresholds only. Possibilities (sales, transfers, adjustments) are not verified causes.",
+      disclaimer:
+        "StockSentry is read-only and does not change Shopify inventory.",
       incidentUrl: `${appBaseUrl()}/incidents/${incident?.id ?? ""}`,
-      summary: incident
-        ? `Rule ${incident.ruleType} flagged this change at ${incident.location?.name ?? "unknown location"}.`
-        : "StockSentry incident notification.",
+      productUrl: item
+        ? `${appBaseUrl()}/products/${item.id}`
+        : `${appBaseUrl()}/products`,
+      summary,
     },
   });
 
@@ -341,8 +427,17 @@ export async function enqueueTestEmail(input: {
       incidentTitle: "Test",
       severity: "INFO",
       productTitle: "—",
+      locationName: "—",
+      previousQuantity: "—",
+      currentQuantity: "—",
       quantityDelta: "—",
+      quantityBeforeAfter: "—",
+      whyFlagged: "This is a delivery test.",
+      confirmedNote: "No inventory facts were evaluated.",
+      disclaimer:
+        "StockSentry is read-only and does not change Shopify inventory.",
       incidentUrl: `${appBaseUrl()}/notifications`,
+      productUrl: `${appBaseUrl()}/products`,
     },
   });
 

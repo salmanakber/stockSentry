@@ -63,7 +63,20 @@ export const aiDefaultsConfigSchema = z.object({
 export const APP_CONFIG_KEYS = {
   AI_PROVIDERS: "ai.providers",
   AI_DEFAULTS: "ai.defaults",
+  EMAIL_RESEND: "email.resend",
 } as const;
+
+export type ResendConfig = {
+  apiKey?: string;
+  fromEmail?: string;
+  enabled?: boolean;
+};
+
+export const resendConfigSchema = z.object({
+  apiKey: z.string().optional(),
+  fromEmail: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
 
 export type AiGenerationResult = {
   provider: AiProviderId;

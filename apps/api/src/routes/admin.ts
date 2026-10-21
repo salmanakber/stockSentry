@@ -8,6 +8,7 @@ import {
   clearPlanEntitlementsCache,
   aiProvidersConfigSchema,
   aiDefaultsConfigSchema,
+  resendConfigSchema,
 } from "@stocksentry/shared";
 import { requireAdmin } from "../middleware/admin-auth.js";
 import { signAdminToken } from "../services/admin-auth.js";
@@ -15,12 +16,14 @@ import {
   getAppConfigValue,
   setAppConfigValue,
   clearAppConfigCache,
+  resolveResendConfig,
 } from "../services/app-config.js";
 import {
   assignShopPlan,
   listActivePlans,
   planRowToEntitlements,
 } from "../services/plans.js";
+import { sendTemplatedEmail } from "../services/email.js";
 
 export const adminRouter = Router();
 
@@ -166,6 +169,159 @@ adminRouter.get("/me", requireAdmin, async (req, res, next) => {
       return;
     }
     res.json({ user: publicAdminUser(user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function maskResendConfig(raw: unknown) {
+  const parsed = resendConfigSchema.safeParse(raw ?? {});
+  const cfg = parsed.success ? parsed.data : {};
+  return {
+    apiKeyMasked: maskApiKey(cfg.apiKey),
+    hasKey: Boolean(cfg.apiKey),
+    last4: cfg.apiKey && cfg.apiKey.length > 4 ? cfg.apiKey.slice(-4) : null,
+    fromEmail: cfg.fromEmail ?? null,
+    enabled: cfg.enabled !== false,
+  };
+}
+
+/** GET /api/admin/config/email */
+adminRouter.get("/config/email", requireAdmin, async (_req, res, next) => {
+  try {
+    const stored = await getAppConfigValue(APP_CONFIG_KEYS.EMAIL_RESEND);
+    const resolved = await resolveResendConfig();
+    res.json({
+      ...maskResendConfig(stored),
+      resolvedHasKey: Boolean(resolved.apiKey),
+      resolvedFromEmail: resolved.fromEmail ?? null,
+      resolvedEnabled: resolved.enabled !== false,
+      envFallback: {
+        hasResendKey: Boolean(process.env.RESEND_API_KEY),
+        emailFrom: process.env.EMAIL_FROM ?? null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** PATCH /api/admin/config/email */
+adminRouter.patch("/config/email", requireAdmin, async (req, res, next) => {
+  try {
+    const body = req.body ?? {};
+    const existing =
+      (await getAppConfigValue<{
+        apiKey?: string;
+        fromEmail?: string;
+        enabled?: boolean;
+      }>(APP_CONFIG_KEYS.EMAIL_RESEND)) ?? {};
+
+    const nextCfg = {
+      apiKey:
+        typeof body.apiKey === "string" && body.apiKey.length > 0
+          ? body.apiKey
+          : body.clearKey
+            ? undefined
+            : existing.apiKey,
+      fromEmail:
+        typeof body.fromEmail === "string"
+          ? body.fromEmail.trim()
+          : existing.fromEmail,
+      enabled:
+        typeof body.enabled === "boolean" ? body.enabled : existing.enabled !== false,
+    };
+
+    const parsed = resendConfigSchema.safeParse(nextCfg);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "invalid_email_config",
+        details: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    await setAppConfigValue(
+      APP_CONFIG_KEYS.EMAIL_RESEND,
+      parsed.data as unknown as Prisma.InputJsonValue,
+    );
+    clearAppConfigCache(APP_CONFIG_KEYS.EMAIL_RESEND);
+
+    const stored = await getAppConfigValue(APP_CONFIG_KEYS.EMAIL_RESEND);
+    res.json(maskResendConfig(stored));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/admin/config/email/test */
+adminRouter.post("/config/email/test", requireAdmin, async (req, res, next) => {
+  try {
+    const to =
+      typeof req.body?.to === "string" ? req.body.to.trim() : "";
+    if (!to || !to.includes("@")) {
+      res.status(400).json({ ok: false, error: "invalid_to", message: "Valid to address required" });
+      return;
+    }
+
+    const cfg = await resolveResendConfig();
+    if (cfg.enabled === false) {
+      res.status(400).json({
+        ok: false,
+        error: "disabled",
+        message: "Resend is disabled in AppConfig",
+      });
+      return;
+    }
+    if (!cfg.apiKey) {
+      res.status(400).json({
+        ok: false,
+        error: "NO_EMAIL_PROVIDER",
+        message: "No Resend API key configured (AppConfig or RESEND_API_KEY)",
+      });
+      return;
+    }
+
+    const result = await sendTemplatedEmail({
+      shopId: "",
+      to,
+      key: "TEST",
+      vars: {
+        shopName: "StockSentry admin",
+        summary: "Admin Resend configuration test",
+        incidentTitle: "Test",
+        severity: "INFO",
+        productTitle: "—",
+        locationName: "—",
+        previousQuantity: "—",
+        currentQuantity: "—",
+        quantityDelta: "—",
+        quantityBeforeAfter: "—",
+        whyFlagged: "Admin panel test send.",
+        confirmedNote: "No inventory facts were evaluated.",
+        disclaimer:
+          "StockSentry is read-only and does not change Shopify inventory.",
+        incidentUrl: process.env.APP_URL ?? "https://stocksentry.tidyflowapp.com",
+        productUrl: process.env.APP_URL ?? "https://stocksentry.tidyflowapp.com",
+      },
+    });
+
+    if (!result.ok) {
+      res.status(502).json({
+        ok: false,
+        error: result.errorCode ?? "EMAIL_SEND_FAILED",
+        message: `Send failed (${result.errorCode ?? "unknown"})`,
+        provider: result.provider,
+      });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      message: `Test email sent to ${to}`,
+      provider: result.provider,
+      messageId: result.messageId,
+    });
   } catch (err) {
     next(err);
   }

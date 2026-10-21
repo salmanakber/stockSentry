@@ -5,8 +5,8 @@ import {
 } from "@stocksentry/database";
 import {
   AI_DEFAULTS,
+  DEFAULT_MONITORING,
   DEFAULT_THRESHOLDS,
-  DETECTION_DEFAULTS,
   RULE_TYPES,
   defaultRuleConfigurations,
 } from "@stocksentry/shared";
@@ -44,10 +44,7 @@ async function seedInstallDefaults(shopId: string) {
     create: {
       shopId,
       thresholds: DEFAULT_THRESHOLDS as unknown as Prisma.InputJsonValue,
-      monitoring: {
-        reconciliationIntervalHours:
-          DETECTION_DEFAULTS.reconciliationIntervalHours,
-      } as Prisma.InputJsonValue,
+      monitoring: DEFAULT_MONITORING as unknown as Prisma.InputJsonValue,
       ai: {
         monthlyReportLimit: AI_DEFAULTS.monthlyReportLimit,
         promptVersion: AI_DEFAULTS.promptVersion,

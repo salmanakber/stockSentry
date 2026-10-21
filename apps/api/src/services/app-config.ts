@@ -5,8 +5,10 @@ import {
   aiDefaultsConfigSchema,
   aiProvidersConfigSchema,
   parseProviderOrder,
+  resendConfigSchema,
   type AiDefaultsConfig,
   type AiProvidersConfig,
+  type ResendConfig,
 } from "@stocksentry/shared";
 
 const configCache = new Map<string, { at: number; value: unknown }>();
@@ -114,5 +116,27 @@ export async function resolveAiDefaultsConfig(): Promise<AiDefaultsConfig> {
       (parsed.success ? parsed.data.promptVersion : undefined) ?? "v1",
     timeoutMs:
       (parsed.success ? parsed.data.timeoutMs : undefined) ?? 25_000,
+  };
+}
+
+const DEFAULT_FROM_EMAIL =
+  "StockSentry <noreply@stocksentry.tidyflowapp.com>";
+
+/**
+ * Merge AppConfig `email.resend` with env fallbacks.
+ * AppConfig wins when a key is set; env fills gaps (`RESEND_API_KEY`, `EMAIL_FROM`).
+ */
+export async function resolveResendConfig(): Promise<ResendConfig> {
+  const fromDb = await getAppConfigValue<unknown>(APP_CONFIG_KEYS.EMAIL_RESEND);
+  const parsed = resendConfigSchema.safeParse(fromDb ?? {});
+  const db = parsed.success ? parsed.data : {};
+
+  return {
+    apiKey: db.apiKey || process.env.RESEND_API_KEY || undefined,
+    fromEmail:
+      db.fromEmail ||
+      process.env.EMAIL_FROM ||
+      DEFAULT_FROM_EMAIL,
+    enabled: db.enabled !== false,
   };
 }

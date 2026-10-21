@@ -13,6 +13,7 @@ export const settingsRouter = Router();
 
 const EMAIL_KEYS: EmailTemplateKey[] = [
   "INCIDENT_ALERT",
+  "REFILL_ALERT",
   "DIGEST",
   "TEST",
 ];

@@ -200,6 +200,33 @@ export default function OverviewPage() {
           />
           <BundleRiskCard groups={data?.bundleRisk} loading={loading} />
           <AiReportsCard data={data?.aiReports} loading={loading} />
+          <div className="card rv">
+            <div className="ct">
+              <div>
+                <b>Refill attention</b>
+                <small>
+                  Items with latest observed qty ≤ threshold
+                  {data?.refillAttention?.threshold != null
+                    ? ` (${data.refillAttention.threshold})`
+                    : ""}
+                  . Suggestions only — StockSentry never changes inventory.
+                </small>
+              </div>
+              <Link href="/products" className="btn">
+                Products
+              </Link>
+            </div>
+            <div className="facts" style={{ marginBottom: 0 }}>
+              <div>
+                <small>Items ≤ threshold</small>
+                <b>{data?.refillAttention?.count ?? 0}</b>
+              </div>
+              <div>
+                <small>Threshold</small>
+                <b>{data?.refillAttention?.threshold ?? 10}</b>
+              </div>
+            </div>
+          </div>
           {(data?.supplierRisk?.openIncidents ?? 0) > 0 ||
           (data?.supplierRisk?.linkedItems ?? 0) > 0 ? (
             <div className="card rv">

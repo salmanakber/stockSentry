@@ -5,31 +5,62 @@ import {
   type RelationshipSource,
 } from "@stocksentry/database";
 import { requireMerchant } from "../middleware/auth.js";
+import {
+  getRefillThreshold,
+  latestQuantitiesByShop,
+} from "../services/refill.js";
 
 export const bundlesRouter = Router();
 
 bundlesRouter.get("/bundles", requireMerchant, async (req, res, next) => {
   try {
     const shopId = req.shopId!;
-    const groups = await prisma.bundleGroup.findMany({
-      where: { shopId },
-      orderBy: { createdAt: "desc" },
-      include: {
-        items: {
-          include: {
-            inventoryItem: {
-              select: {
-                id: true,
-                productTitle: true,
-                variantTitle: true,
-                sku: true,
+    const [groups, threshold, latestQtys] = await Promise.all([
+      prisma.bundleGroup.findMany({
+        where: { shopId },
+        orderBy: { createdAt: "desc" },
+        include: {
+          items: {
+            include: {
+              inventoryItem: {
+                select: {
+                  id: true,
+                  productTitle: true,
+                  variantTitle: true,
+                  sku: true,
+                },
               },
             },
           },
         },
-      },
-    });
-    res.json({ items: groups });
+      }),
+      getRefillThreshold(shopId),
+      latestQuantitiesByShop(shopId),
+    ]);
+
+    const minQtyByItem = new Map<string, number>();
+    for (const row of latestQtys) {
+      const prev = minQtyByItem.get(row.inventoryItemId);
+      if (prev == null || row.quantity < prev) {
+        minQtyByItem.set(row.inventoryItemId, row.quantity);
+      }
+    }
+
+    const items = groups.map((g) => ({
+      ...g,
+      items: g.items.map((it) => {
+        const qty = minQtyByItem.get(it.inventoryItemId) ?? null;
+        const refillAtRisk = qty != null && qty <= threshold;
+        return {
+          ...it,
+          quantity: qty,
+          refillAtRisk,
+          refillThreshold: threshold,
+        };
+      }),
+    }));
+
+    res.json({ items, refillThreshold: threshold });
   } catch (err) {
     next(err);
   }

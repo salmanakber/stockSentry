@@ -184,6 +184,53 @@ export default function ProductReportPage() {
               </div>
             </Card>
 
+            {data.refillRisk?.atRisk ? (
+              <Card>
+                <CardTitle
+                  title="Refill suggestion"
+                  subtitle="Observed low quantity — suggestion only"
+                  action={
+                    <Button
+                      variant="primary"
+                      disabled={busy}
+                      onClick={() => void generateReport()}
+                    >
+                      {busy ? "Generating…" : "Generate product report"}
+                    </Button>
+                  }
+                />
+                <div className="facts" style={{ marginBottom: 12 }}>
+                  <div>
+                    <small>Threshold</small>
+                    <b>{data.refillRisk.threshold}</b>
+                  </div>
+                  <div>
+                    <small>Lowest qty</small>
+                    <b>
+                      {data.refillRisk.minQuantity != null
+                        ? data.refillRisk.minQuantity
+                        : "—"}
+                    </b>
+                  </div>
+                  <div>
+                    <small>Locations</small>
+                    <b>{data.refillRisk.locations?.length ?? 0}</b>
+                  </div>
+                </div>
+                {(data.refillRisk.locations ?? []).map((loc) => (
+                  <div className="list-row" key={loc.locationId}>
+                    <div>
+                      <b>{loc.name}</b>
+                      <div className="m">Qty {loc.quantity}</div>
+                    </div>
+                  </div>
+                ))}
+                <p className="m" style={{ marginTop: 8 }}>
+                  {data.refillRisk.suggestedAction}
+                </p>
+              </Card>
+            ) : null}
+
             <Card>
               <CardTitle
                 title="Quantity by location"

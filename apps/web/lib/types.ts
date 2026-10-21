@@ -83,7 +83,14 @@ export interface RepeatIncident {
 export interface BundleRiskGroup {
   name: string;
   mapping: string;
-  components: { name: string; atRisk?: boolean }[];
+  components: {
+    name: string;
+    atRisk?: boolean;
+    refillAtRisk?: boolean;
+    quantity?: number | null;
+  }[];
+  openComponentCount?: number;
+  componentCount?: number;
 }
 
 export interface AiReportsSummary {
@@ -131,6 +138,10 @@ export interface OverviewResponse {
   supplierRisk?: {
     linkedItems?: number;
     openIncidents?: number;
+  } | null;
+  refillAttention?: {
+    count: number;
+    threshold: number;
   } | null;
 }
 
@@ -271,6 +282,19 @@ export interface ProductDetailResponse {
     openIncidentCount?: number;
     monitoringHealth?: string;
   };
+  refillRisk?: {
+    atRisk: boolean;
+    threshold: number;
+    minQuantity: number | null;
+    locations: Array<{
+      locationId: string;
+      name: string;
+      quantity: number;
+      threshold: number;
+      suggestion: string;
+    }>;
+    suggestedAction: string;
+  };
   productReport?: {
     id: string;
     status: string;
@@ -327,6 +351,9 @@ export interface BundleGroupItem {
   id: string;
   role: string;
   inventoryItemId: string;
+  quantity?: number | null;
+  refillAtRisk?: boolean;
+  refillThreshold?: number;
   inventoryItem?: {
     id?: string;
     productTitle?: string | null;

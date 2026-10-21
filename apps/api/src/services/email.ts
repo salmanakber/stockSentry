@@ -1,4 +1,5 @@
 import { prisma, type EmailTemplateKey } from "@stocksentry/database";
+import { resolveResendConfig } from "./app-config.js";
 
 export type EmailVars = Record<string, string | number | null | undefined>;
 
@@ -8,10 +9,6 @@ export type SendEmailResult = {
   messageId?: string;
   errorCode?: string;
 };
-
-const DEFAULT_FROM =
-  process.env.EMAIL_FROM ??
-  "StockSentry <noreply@stocksentry.tidyflowapp.com>";
 
 /** Simple mustache-like `{{key}}` substitution (no sections/partials). */
 export function renderTemplate(template: string, vars: EmailVars): string {
@@ -58,25 +55,56 @@ export async function resolveEmailTemplate(
   };
 }
 
+/** Wrap arbitrary body HTML in the StockSentry branded shell when not already wrapped. */
+export function wrapBrandedHtml(
+  bodyHtml: string,
+  opts?: { eyebrow?: string },
+): string {
+  if (
+    bodyHtml.includes("StockSentry") &&
+    bodyHtml.includes("#008060") &&
+    bodyHtml.includes("<!DOCTYPE")
+  ) {
+    return bodyHtml;
+  }
+
+  const eyebrow = opts?.eyebrow ?? "Inventory monitoring";
+  return `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f4f6f5;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f5;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #dce5e1;">
+<tr><td style="background:#008060;padding:20px 28px;">
+  <div style="color:#ffffff;font-size:18px;font-weight:700;">StockSentry</div>
+  <div style="color:#d4f5eb;font-size:13px;margin-top:4px;">${eyebrow}</div>
+</td></tr>
+<tr><td style="padding:28px;color:#44554d;font-size:14px;line-height:1.5;">
+${bodyHtml}
+</td></tr>
+<tr><td style="padding:16px 28px;background:#f7faf8;color:#6b7c74;font-size:12px;line-height:1.45;">
+StockSentry monitors stock and flags unusual changes. It is read-only and never changes Shopify inventory.
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+}
+
 async function sendViaResend(input: {
   to: string;
   subject: string;
   html: string;
   text: string;
+  apiKey: string;
+  fromEmail: string;
 }): Promise<SendEmailResult> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    return { ok: false, provider: "none", errorCode: "NO_EMAIL_PROVIDER" };
-  }
-
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${input.apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: DEFAULT_FROM,
+      from: input.fromEmail,
       to: [input.to],
       subject: input.subject,
       html: input.html,
@@ -103,6 +131,7 @@ async function sendViaSmtp(input: {
   subject: string;
   html: string;
   text: string;
+  fromEmail: string;
 }): Promise<SendEmailResult> {
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
@@ -112,7 +141,6 @@ async function sendViaSmtp(input: {
   }
 
   const port = Number(process.env.SMTP_PORT || 587);
-  // Dynamic import so API boots without nodemailer when unused
   const nodemailer = await import("nodemailer");
   const transport = nodemailer.createTransport({
     host,
@@ -122,7 +150,7 @@ async function sendViaSmtp(input: {
   });
 
   const info = await transport.sendMail({
-    from: DEFAULT_FROM,
+    from: input.fromEmail,
     to: input.to,
     subject: input.subject,
     html: input.html,
@@ -142,15 +170,34 @@ export async function sendEmail(input: {
   html: string;
   text: string;
 }): Promise<SendEmailResult> {
-  if (process.env.RESEND_API_KEY) {
-    return sendViaResend(input);
+  const cfg = await resolveResendConfig();
+  const fromEmail =
+    cfg.fromEmail || "StockSentry <noreply@stocksentry.tidyflowapp.com>";
+  const html = wrapBrandedHtml(input.html);
+
+  if (cfg.enabled !== false && cfg.apiKey) {
+    return sendViaResend({
+      to: input.to,
+      subject: input.subject,
+      html,
+      text: input.text,
+      apiKey: cfg.apiKey,
+      fromEmail,
+    });
   }
+
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    return sendViaSmtp(input);
+    return sendViaSmtp({
+      to: input.to,
+      subject: input.subject,
+      html,
+      text: input.text,
+      fromEmail,
+    });
   }
 
   console.warn(
-    "[email] NO_EMAIL_PROVIDER — set RESEND_API_KEY or SMTP_* to deliver mail",
+    "[email] NO_EMAIL_PROVIDER — configure admin Resend settings or set RESEND_API_KEY / SMTP_*",
     { to: input.to, subject: input.subject },
   );
   return { ok: false, provider: "none", errorCode: "NO_EMAIL_PROVIDER" };

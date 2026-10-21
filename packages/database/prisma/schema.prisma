@@ -653,6 +653,7 @@ model ProductReport {
 
 enum EmailTemplateKey {
   INCIDENT_ALERT
+  REFILL_ALERT
   DIGEST
   TEST
 }

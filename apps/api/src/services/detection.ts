@@ -9,6 +9,7 @@ import {
   DETECTION_DEFAULTS,
   absoluteDelta,
   buildIncidentKey,
+  defaultRuleConfigurations,
   detectionRuleConfigSchema,
   exceedsAbsoluteThreshold,
   exceedsPercentageThreshold,
@@ -17,8 +18,11 @@ import {
 import {
   createEmailNotification,
   createInAppNotification,
+  isHighOrCritical,
+  isMediumOrAbove,
 } from "./notify.js";
 import { enqueue, QUEUE_NAMES } from "../queues/index.js";
+import { getRefillThreshold } from "./refill.js";
 
 async function enqueuePendingDelivery(
   delivery: { id: string; status: string } | null,
@@ -32,9 +36,40 @@ async function enqueuePendingDelivery(
   }
 }
 
-/** HIGH/CRITICAL NEW incidents get email when EMAIL channel is configured. */
-function shouldEmailSeverity(severity: IncidentSeverity): boolean {
-  return severity === "HIGH" || severity === "CRITICAL";
+async function notifyNewOrUpgradedIncident(input: {
+  shopId: string;
+  incidentId: string;
+  severity: IncidentSeverity;
+  created: boolean;
+  severityUpgradedToHigh: boolean;
+}) {
+  if (input.created && isMediumOrAbove(input.severity)) {
+    const inApp = await createInAppNotification({
+      shopId: input.shopId,
+      incidentId: input.incidentId,
+      severity: input.severity,
+    }).catch(() => null);
+    await enqueuePendingDelivery(inApp, input.shopId);
+
+    const email = await createEmailNotification({
+      shopId: input.shopId,
+      incidentId: input.incidentId,
+      severity: input.severity,
+      forceIfDestination: isHighOrCritical(input.severity),
+    }).catch(() => null);
+    await enqueuePendingDelivery(email, input.shopId);
+    return;
+  }
+
+  if (input.severityUpgradedToHigh) {
+    const email = await createEmailNotification({
+      shopId: input.shopId,
+      incidentId: input.incidentId,
+      severity: input.severity,
+      forceIfDestination: true,
+    }).catch(() => null);
+    await enqueuePendingDelivery(email, input.shopId);
+  }
 }
 
 export type EvaluateObservationContext = {
@@ -111,9 +146,9 @@ async function upsertIncident(input: {
 }): Promise<{ incident: Incident; created: boolean }> {
   const existing = await findOpenIncident(input.shopId, input.incidentKey);
   if (existing) {
-    const severityUpgraded =
-      shouldEmailSeverity(input.severity) &&
-      !shouldEmailSeverity(existing.severity);
+    const severityUpgradedToHigh =
+      isHighOrCritical(input.severity) &&
+      !isHighOrCritical(existing.severity);
     const incident = await prisma.incident.update({
       where: { id: existing.id },
       data: {
@@ -140,13 +175,14 @@ async function upsertIncident(input: {
         content: `Rule ${input.ruleType} matched again`,
       },
     });
-    if (severityUpgraded && incident.status === "NEW") {
-      const emailDelivery = await createEmailNotification({
+    if (severityUpgradedToHigh && incident.status === "NEW") {
+      await notifyNewOrUpgradedIncident({
         shopId: input.shopId,
         incidentId: incident.id,
         severity: input.severity,
-      }).catch(() => null);
-      await enqueuePendingDelivery(emailDelivery, input.shopId);
+        created: false,
+        severityUpgradedToHigh: true,
+      });
     }
     return { incident, created: false };
   }
@@ -188,21 +224,13 @@ async function upsertIncident(input: {
     },
   });
 
-  const delivery = await createInAppNotification({
+  await notifyNewOrUpgradedIncident({
     shopId: input.shopId,
     incidentId: incident.id,
     severity: input.severity,
-  }).catch(() => null);
-  await enqueuePendingDelivery(delivery, input.shopId);
-
-  if (shouldEmailSeverity(input.severity)) {
-    const emailDelivery = await createEmailNotification({
-      shopId: input.shopId,
-      incidentId: incident.id,
-      severity: input.severity,
-    }).catch(() => null);
-    await enqueuePendingDelivery(emailDelivery, input.shopId);
-  }
+    created: true,
+    severityUpgradedToHigh: false,
+  });
 
   return { incident, created: true };
 }
@@ -422,6 +450,86 @@ async function evaluateReconciliationDiscrepancy(
   return incident;
 }
 
+async function evaluateRefillRisk(
+  rule: DetectionRule,
+  ctx: EvaluateObservationContext,
+): Promise<Incident | null> {
+  const config = parseConfig(rule.configuration);
+  const shopThreshold = await getRefillThreshold(ctx.shopId);
+  const threshold =
+    config.absolute?.threshold ?? shopThreshold ?? DETECTION_DEFAULTS.refillThreshold;
+
+  const atOrBelow = ctx.quantity <= threshold;
+  if (!atOrBelow) return null;
+
+  // Fire on already-low qty, or after a drop that lands at/below threshold
+  const droppedInto =
+    ctx.previousQuantity != null &&
+    ctx.previousQuantity > threshold &&
+    ctx.quantity <= threshold;
+  const sharpDropLeavesLow =
+    ctx.previousQuantity != null &&
+    ctx.previousQuantity - ctx.quantity >= Math.max(1, Math.floor(threshold / 2)) &&
+    ctx.quantity <= threshold;
+
+  if (
+    ctx.previousQuantity != null &&
+    !droppedInto &&
+    !sharpDropLeavesLow &&
+    ctx.previousQuantity <= threshold
+  ) {
+    // Already-low and still low — allow first detection; suppress via window after
+  }
+
+  const incidentKey = buildIncidentKey({
+    ruleType: rule.ruleType,
+    inventoryItemId: ctx.inventoryItemId,
+    locationId: ctx.locationId,
+  });
+
+  if (await wasRecentlyTouched(ctx.shopId, incidentKey, suppressionMinutes(config))) {
+    return null;
+  }
+
+  const severity: IncidentSeverity =
+    ctx.quantity <= 0
+      ? "HIGH"
+      : ctx.quantity <= Math.floor(threshold / 2)
+        ? "MEDIUM"
+        : "MEDIUM";
+
+  const evidenceVersion = `obs:${ctx.observationId}:refill:${ctx.quantity}`;
+  const { incident } = await upsertIncident({
+    shopId: ctx.shopId,
+    incidentKey,
+    type: "REFILL_RISK",
+    ruleType: rule.ruleType,
+    ruleVersion: rule.version,
+    severity,
+    inventoryItemId: ctx.inventoryItemId,
+    locationId: ctx.locationId,
+    evidenceVersion,
+    detectedAt: ctx.observedAt,
+    evidenceType: "REFILL_SUGGESTION",
+    observationIds: [ctx.observationId],
+    evidencePayload: {
+      previousQuantity: ctx.previousQuantity,
+      currentQuantity: ctx.quantity,
+      refillThreshold: threshold,
+      absoluteDelta:
+        ctx.previousQuantity != null
+          ? Math.abs(ctx.quantity - ctx.previousQuantity)
+          : null,
+      droppedIntoThreshold: droppedInto,
+      sharpDropLeavesLow,
+      suggestion:
+        "Review Shopify inventory and plan a refill — StockSentry will not change quantities.",
+      source: ctx.source,
+    },
+  });
+  return incident;
+}
+
 async function evaluateBundleComponentRisk(
   rule: DetectionRule,
   ctx: EvaluateObservationContext,
@@ -560,9 +668,27 @@ export async function evaluateStaleMonitoring(shopId: string): Promise<Incident 
  * Evaluate enabled detection rules against a new observation.
  * Returns incidents touched (created or updated).
  */
+async function ensureRefillRule(shopId: string): Promise<void> {
+  const configs = defaultRuleConfigurations();
+  const def = configs.REFILL_RISK;
+  await prisma.detectionRule.upsert({
+    where: { shopId_ruleType: { shopId, ruleType: "REFILL_RISK" } },
+    create: {
+      shopId,
+      ruleType: "REFILL_RISK",
+      enabled: def.enabled,
+      configuration: def.configuration as Prisma.InputJsonValue,
+      version: def.version,
+    },
+    update: {},
+  });
+}
+
 export async function evaluateObservation(
   ctx: EvaluateObservationContext,
 ): Promise<Incident[]> {
+  await ensureRefillRule(ctx.shopId).catch(() => undefined);
+
   const rules = await prisma.detectionRule.findMany({
     where: { shopId: ctx.shopId, enabled: true },
   });
@@ -586,6 +712,9 @@ export async function evaluateObservation(
         break;
       case "BUNDLE_COMPONENT_RISK":
         result = await evaluateBundleComponentRisk(rule, ctx);
+        break;
+      case "REFILL_RISK":
+        result = await evaluateRefillRisk(rule, ctx);
         break;
       default:
         break;

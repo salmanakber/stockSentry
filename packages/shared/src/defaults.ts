@@ -6,10 +6,18 @@ export const DETECTION_DEFAULTS = {
   repeatedChangeWindowMinutes: 10,
   duplicateSuppressionMinutes: 30,
   reconciliationIntervalHours: 6,
+  /** Suggest refill when observed qty is at or below this (alerts only — never writes Shopify). */
+  refillThreshold: 10,
 } as const;
 
 /** ShopSettings.thresholds JSON seeded on install. */
 export const DEFAULT_THRESHOLDS = DETECTION_DEFAULTS;
+
+/** ShopSettings.monitoring defaults. */
+export const DEFAULT_MONITORING = {
+  reconciliationIntervalHours: DETECTION_DEFAULTS.reconciliationIntervalHours,
+  refillThreshold: DETECTION_DEFAULTS.refillThreshold,
+} as const;
 
 export const AI_DEFAULTS = {
   monthlyReportLimit: 50,

@@ -9,6 +9,11 @@ import {
   pipelineStatsLast24h,
 } from "../services/monitoring.js";
 import { aiReportUsageSummary } from "../services/ai-report.js";
+import {
+  countRefillAttentionItems,
+  getRefillThreshold,
+  latestQuantitiesByShop,
+} from "../services/refill.js";
 
 export const overviewRouter = Router();
 
@@ -38,6 +43,9 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
       aiReports,
       pipelineStats,
       supplierLinks,
+      refillAttention,
+      refillThreshold,
+      latestQtys,
     ] = await Promise.all([
       observationSourceBreakdown(shopId, 14),
       incidentTrendLastDays(shopId, 14),
@@ -107,7 +115,18 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
         where: { shopId },
         select: { inventoryItemId: true },
       }),
+      countRefillAttentionItems(shopId),
+      getRefillThreshold(shopId),
+      latestQuantitiesByShop(shopId),
     ]);
+
+    const qtyByItem = new Map<string, number>();
+    for (const row of latestQtys) {
+      const prev = qtyByItem.get(row.inventoryItemId);
+      if (prev == null || row.quantity < prev) {
+        qtyByItem.set(row.inventoryItemId, row.quantity);
+      }
+    }
 
     const supplierItemIds = [
       ...new Set(supplierLinks.map((s) => s.inventoryItemId)),
@@ -144,14 +163,33 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
 
     const bundleRisk = bundleGroups
       .map((g) => {
-        const openComponents = g.items.filter(
-          (i) => i.inventoryItem.incidents.length > 0,
-        );
+        const components = g.items.map((i) => {
+          const title =
+            [i.inventoryItem.productTitle, i.inventoryItem.variantTitle]
+              .filter(Boolean)
+              .join(" · ") ||
+            i.inventoryItem.sku ||
+            "Item";
+          const minQty = qtyByItem.get(i.inventoryItemId);
+          const openIncidents = i.inventoryItem.incidents.length > 0;
+          const refillAtRisk =
+            minQty != null && minQty <= refillThreshold;
+          return {
+            name: title,
+            atRisk: openIncidents || refillAtRisk,
+            refillAtRisk,
+            openIncidents,
+            quantity: minQty ?? null,
+          };
+        });
+        const openComponents = components.filter((c) => c.atRisk);
         return {
           id: g.id,
           name: g.name,
+          mapping: "Manual",
           openComponentCount: openComponents.length,
           componentCount: g.items.length,
+          components,
         };
       })
       .filter((g) => g.openComponentCount > 0);
@@ -189,6 +227,10 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
             ?._count._all ?? 0,
       })),
       bundleRisk,
+      refillAttention: {
+        count: refillAttention.count,
+        threshold: refillAttention.threshold,
+      },
       aiReports,
       pipelineStats,
       supplierRisk: {

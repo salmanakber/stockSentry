@@ -60,6 +60,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [intervalHours, setIntervalHours] = useState(6);
+  const [refillThreshold, setRefillThreshold] = useState(10);
   const [thresholds, setThresholds] = useState<SettingsThresholds>({
     absoluteChangeThreshold: 30,
     percentageChangeThreshold: 50,
@@ -95,6 +96,11 @@ export default function SettingsPage() {
       repeatedChangeWindowMinutes: num(t.repeatedChangeWindowMinutes, 10),
       duplicateSuppressionMinutes: num(t.duplicateSuppressionMinutes, 30),
     });
+    const monitoring = (res.settings?.monitoring ?? {}) as {
+      refillThreshold?: unknown;
+      reconciliationIntervalHours?: unknown;
+    };
+    setRefillThreshold(num(monitoring.refillThreshold, 10));
     setRules(res.detectionRules ?? []);
     const next: PrefState = {
       IN_APP: { enabled: true, minSeverity: "MEDIUM", destinationRef: "" },
@@ -175,6 +181,10 @@ export default function SettingsPage() {
         body: JSON.stringify({
           reconciliationIntervalHours: intervalHours,
           thresholds,
+          monitoring: {
+            reconciliationIntervalHours: intervalHours,
+            refillThreshold: Math.max(0, refillThreshold),
+          },
           detectionRules: rules.map((r) => ({
             ruleType: r.ruleType,
             enabled: r.enabled,
@@ -301,18 +311,37 @@ export default function SettingsPage() {
               title="Monitoring"
               subtitle="Reconciliation cadence and detection thresholds"
             />
-            <div className="field">
-              <label htmlFor="rec-hours">Reconciliation interval (hours)</label>
-              <input
-                id="rec-hours"
-                type="number"
-                min={1}
-                value={intervalHours}
-                onChange={(e) =>
-                  setIntervalHours(Math.max(1, Number(e.target.value) || 1))
-                }
-              />
+            <div className="field-row">
+              <div className="field">
+                <label htmlFor="rec-hours">Reconciliation interval (hours)</label>
+                <input
+                  id="rec-hours"
+                  type="number"
+                  min={1}
+                  value={intervalHours}
+                  onChange={(e) =>
+                    setIntervalHours(Math.max(1, Number(e.target.value) || 1))
+                  }
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="refill-th">Refill threshold (qty)</label>
+                <input
+                  id="refill-th"
+                  type="number"
+                  min={0}
+                  value={refillThreshold}
+                  onChange={(e) =>
+                    setRefillThreshold(Math.max(0, Number(e.target.value) || 0))
+                  }
+                />
+              </div>
             </div>
+            <p className="m" style={{ marginBottom: 12 }}>
+              When observed quantity at a location is at or below the refill
+              threshold, StockSentry opens a refill suggestion (alert only — never
+              writes inventory to Shopify).
+            </p>
             <div className="field-row">
               <div className="field">
                 <label htmlFor="th-abs">Absolute change</label>
@@ -513,6 +542,7 @@ export default function SettingsPage() {
                   ? emailTemplates
                   : [
                       { key: "INCIDENT_ALERT" },
+                      { key: "REFILL_ALERT" },
                       { key: "DIGEST" },
                       { key: "TEST" },
                     ]

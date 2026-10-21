@@ -6,6 +6,10 @@ import { enqueue, QUEUE_NAMES } from "../queues/index.js";
 import { getShopMonitoringSnapshot } from "../services/monitoring.js";
 import { enqueueProductReport } from "../services/product-report.js";
 import { EntitlementError } from "../services/billing.js";
+import {
+  getRefillThreshold,
+  refillSuggestionText,
+} from "../services/refill.js";
 
 export const productsRouter = Router();
 
@@ -227,6 +231,25 @@ productsRouter.get("/products/:id", requireMerchant, async (req, res, next) => {
       };
     });
 
+    const refillThreshold = await getRefillThreshold(shopId);
+    const refillLocations = locationQuantities
+      .filter((l) => l.quantity != null && l.quantity <= refillThreshold)
+      .map((l) => ({
+        locationId: l.locationId,
+        name: l.name,
+        quantity: l.quantity as number,
+        threshold: refillThreshold,
+        suggestion: refillSuggestionText({
+          quantity: l.quantity as number,
+          threshold: refillThreshold,
+        }),
+      }));
+    const minQty = locationQuantities.reduce<number | null>((acc, l) => {
+      if (l.quantity == null) return acc;
+      if (acc == null) return l.quantity;
+      return Math.min(acc, l.quantity);
+    }, null);
+
     res.json({
       item: {
         id: item.id,
@@ -271,6 +294,14 @@ productsRouter.get("/products/:id", requireMerchant, async (req, res, next) => {
         lastChangeAt,
         openIncidentCount: openIncidents.length,
         monitoringHealth: monitoring.monitoringStatus,
+      },
+      refillRisk: {
+        atRisk: refillLocations.length > 0,
+        threshold: refillThreshold,
+        minQuantity: minQty,
+        locations: refillLocations,
+        suggestedAction:
+          "Review Shopify inventory and plan a refill — StockSentry will not change quantities.",
       },
       productReport: latestProductReport,
       latestIncidentAiReport:
