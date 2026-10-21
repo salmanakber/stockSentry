@@ -9,17 +9,17 @@ export default function HelpPage() {
     <div className="pg">
       <PageHeader
         title="Help"
-        subtitle="How Bundle Safety works, what it can see, and how to get support."
+        subtitle="How StockSentry works, what it can see, and how to get support."
       />
 
       <Card>
         <div className="help-sec">
           <CardTitle
-            title="What Bundle Safety does"
+            title="What StockSentry does"
             subtitle="Read-only inventory observation and deterministic incident review"
           />
           <p>
-            Bundle Safety watches inventory quantity observations from Shopify
+            StockSentry watches inventory quantity observations from Shopify
             (webhooks and scheduled reconciliation), applies detection rules, and
             opens incidents for merchant review. An incident is a flag for
             investigation — not proof of theft, error, or a confirmed cause.

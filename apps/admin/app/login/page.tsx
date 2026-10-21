@@ -1,13 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { BrandMark } from "../../components/BrandMark";
 import { adminRequest } from "../../lib/api";
 import { setAdminToken } from "../../lib/auth";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [persist, setPersist] = useState(true);
@@ -25,7 +23,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       setAdminToken(res.token, persist);
-      router.replace("/");
+      window.location.assign("/admin/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -38,11 +36,7 @@ export default function LoginPage() {
       <form className="gate-card" onSubmit={(e) => void onSubmit(e)}>
         <BrandMark />
         <h1>Admin sign in</h1>
-        <p>
-          Bundle Safety platform console. Set ADMIN_EMAIL, ADMIN_PASSWORD, and
-          ADMIN_JWT_SECRET in the monorepo root .env. The JWT is stored in the
-          browser and sent as x-stocksentry-admin-token.
-        </p>
+        <p>Sign in to the StockSentry admin console.</p>
         {error ? <p className="err">{error}</p> : null}
         <div className="field">
           <label htmlFor="email">Email</label>

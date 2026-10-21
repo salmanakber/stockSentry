@@ -86,7 +86,7 @@ export function BootLoader({ onDone, skip = false }: BootLoaderProps) {
         </svg>
       </div>
       <div className="lw">
-        {"Bundle Safety".split("").map((c, i) => (
+        {"StockSentry".split("").map((c, i) => (
           <span key={i} style={{ ["--i" as string]: i }}>
             {c === " " ? "\u00a0" : c}
           </span>

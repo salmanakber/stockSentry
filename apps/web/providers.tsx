@@ -202,7 +202,7 @@ function ShopProviderInner({ children }: { children: React.ReactNode }) {
       setAuthError(
         resolvedShop
           ? "Shopify session token unavailable. Re-open the app from Shopify Admin or install again."
-          : "Open Bundle Safety from Shopify Admin (Apps → Bundle Safety).",
+          : "Open StockSentry from Shopify Admin (Apps → StockSentry).",
       );
       setReady(true);
     }

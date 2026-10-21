@@ -27,7 +27,7 @@ export default function SettingsPage() {
       <div className="head">
         <div>
           <h1>Settings</h1>
-          <div className="sub">Bootstrap notes and admin JWT details</div>
+          <div className="sub">Platform configuration status</div>
         </div>
         <button type="button" className="btn" onClick={() => void load()}>
           Refresh
@@ -39,30 +39,26 @@ export default function SettingsPage() {
       <div className="card">
         <div className="ct">
           <div>
-            <h2>Bootstrap</h2>
-            <p>First-time platform admin setup</p>
+            <h2>Access</h2>
+            <p>Admin console readiness</p>
           </div>
         </div>
-        <p className="note" style={{ marginTop: 0 }}>
-          {info?.bootstrapNote ??
-            "Set ADMIN_EMAIL, ADMIN_PASSWORD, and ADMIN_JWT_SECRET in the monorepo root .env; JWT is stored in the browser as x-stocksentry-admin-token."}
-        </p>
-        <div className="field-row" style={{ marginTop: 16 }}>
+        <div className="field-row" style={{ marginTop: 0 }}>
           <div>
-            <small className="muted">Bootstrap secret</small>
+            <small className="muted">Bootstrap</small>
             <div>
               <span
                 className={`chip ${info?.bootstrapSecretConfigured ? "on" : "off"}`}
               >
-                {info?.bootstrapSecretConfigured ? "Configured" : "Missing"}
+                {info?.bootstrapSecretConfigured ? "Ready" : "Needs setup"}
               </span>
             </div>
           </div>
           <div>
-            <small className="muted">JWT secret</small>
+            <small className="muted">Session auth</small>
             <div>
               <span className={`chip ${info?.jwt.configured ? "on" : "off"}`}>
-                {info?.jwt.configured ? "Configured" : "Missing"}
+                {info?.jwt.configured ? "Ready" : "Needs setup"}
               </span>
             </div>
           </div>
@@ -72,25 +68,15 @@ export default function SettingsPage() {
       <div className="card">
         <div className="ct">
           <div>
-            <h2>JWT</h2>
-            <p>How the admin UI authenticates API calls</p>
+            <h2>Session</h2>
+            <p>How long signed-in admin sessions last</p>
           </div>
         </div>
         <div className="table-wrap">
           <table className="table">
             <tbody>
               <tr>
-                <td>Header</td>
-                <td className="mono">
-                  {info?.jwt.headerName ?? "x-stocksentry-admin-token"}
-                </td>
-              </tr>
-              <tr>
-                <td>Algorithm</td>
-                <td className="mono">{info?.jwt.algorithm ?? "HS256"}</td>
-              </tr>
-              <tr>
-                <td>TTL</td>
+                <td>Session length</td>
                 <td className="mono">
                   {info?.jwt.ttlHours != null
                     ? `${info.jwt.ttlHours} hours`

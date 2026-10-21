@@ -34,7 +34,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <div className="br">
           <BrandMark />
           <div>
-            <b>Bundle Safety</b>
+            <b>StockSentry</b>
             <small>Platform admin</small>
           </div>
         </div>

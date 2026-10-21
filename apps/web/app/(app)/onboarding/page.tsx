@@ -71,7 +71,7 @@ export default function OnboardingPage() {
     <div className="pg">
       <PageHeader
         title="Onboarding"
-        subtitle="Checklist to get Bundle Safety monitoring ready."
+        subtitle="Checklist to get StockSentry monitoring ready."
         actions={
           <>
             <Link href="/products" className="btn">

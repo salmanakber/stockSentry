@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppProvider } from "../providers";
 
 export const metadata: Metadata = {
-  title: "Bundle Safety",
+  title: "StockSentry",
   description:
     "Monitor inventory changes, investigate suspicious stock movements, and catch potential overselling risks sooner.",
 };

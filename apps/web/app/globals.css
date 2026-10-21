@@ -253,3 +253,22 @@ a.btn{color:var(--ink)}a.btn.p{color:#fff}
 .pg .plan-card ul{margin:0;padding-left:18px;color:#475467;font-size:12.5px;line-height:1.45}
 .pg .plan-card ul li{margin-bottom:4px}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.rv{opacity:1;transform:none}.dr{stroke-dashoffset:0}.fa{opacity:1}.src i,.oc i,.trk i{transform:none}.bar i{width:var(--w)}.pl i,.nd .ic{opacity:1;transform:none}.ring .fg{stroke-dashoffset:calc(100 - var(--v))}.lgo path{stroke-dashoffset:0}.lw span{opacity:1;transform:none}}
+/* marketing home */
+.mkt{min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(165deg,#fff 0%,#f4f6f8 42%,#e6f4ef 100%)}
+.mkt-hero{flex:1;display:flex;flex-direction:column;justify-content:center;padding:72px 28px 48px;max-width:720px;margin:0 auto;width:100%;animation:mktIn .8s var(--ease) both}
+@keyframes mktIn{from{opacity:0;transform:translateY(18px)}}
+.mkt-brand{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+.mkt-brand span{font-size:28px;font-weight:700;letter-spacing:-.03em}
+.mkt-hero h1{font-size:clamp(28px,4.5vw,40px);line-height:1.15;letter-spacing:-.035em;margin:0 0 14px;font-weight:700}
+.mkt-hero>p{margin:0 0 28px;color:var(--mut);font-size:16px;line-height:1.55;max-width:36em}
+.mkt-cta{display:flex;flex-wrap:wrap;gap:10px}
+.mkt-features{padding:0 28px 56px;max-width:720px;margin:0 auto;width:100%}
+.mkt-features h2{font-size:18px;letter-spacing:-.02em;margin:0 0 8px}
+.mkt-lead{margin:0 0 20px;color:var(--mut);font-size:14px}
+.mkt-features ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.mkt-features li{display:flex;flex-direction:column;gap:4px;padding:16px 18px;border-radius:14px;background:#fff;border:1px solid var(--line)}
+.mkt-features li b{font-size:14px;letter-spacing:-.01em}
+.mkt-features li span{color:var(--mut);font-size:13.5px;line-height:1.5}
+.mkt-foot{display:flex;gap:18px;justify-content:center;padding:20px 28px 32px;border-top:1px solid var(--line)}
+.mkt-foot a{color:var(--mut);text-decoration:none;font-size:13px;font-weight:500}
+.mkt-foot a:hover{color:var(--acc)}

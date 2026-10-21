@@ -5,7 +5,7 @@ export default function TermsPage() {
     <div className="legal">
       <h1>Terms</h1>
       <p>
-        Bundle Safety is provided as a read-only inventory monitoring tool.
+        StockSentry is provided as a read-only inventory monitoring tool.
         Flags and AI explanations are informational and do not constitute proof
         of error, fraud, or required action. You remain responsible for
         inventory accuracy in Shopify.

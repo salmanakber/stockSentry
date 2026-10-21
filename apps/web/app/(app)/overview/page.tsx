@@ -217,7 +217,7 @@ export default function OverviewPage() {
           Quantities are observations from Shopify and may be delayed,
           duplicated or out of order. An observed change is not a confirmed
           cause: sales, returns, transfers and manual adjustments all move
-          stock. Bundle Safety is read-only (scopes: read_inventory,
+          stock. StockSentry is read-only (scopes: read_inventory,
           read_products) and never changes your inventory.
         </div>
       </div>

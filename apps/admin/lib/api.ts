@@ -1,7 +1,10 @@
 import { clearAdminToken, getAdminToken } from "./auth";
 
 function apiBase(): string {
-  const raw = process.env.NEXT_PUBLIC_API_URL ?? "";
+  // Browser: same-origin /api → nginx → API (6081).
+  // Server: NEXT_PUBLIC_API_URL only when set and non-empty.
+  if (typeof window !== "undefined") return "";
+  const raw = (process.env.NEXT_PUBLIC_API_URL ?? "").trim();
   return raw.replace(/\/$/, "");
 }
 
@@ -31,7 +34,10 @@ export async function adminRequest<T>(
 
   if (res.status === 401) {
     clearAdminToken();
-    if (typeof window !== "undefined" && !path.includes("/auth/login")) {
+    if (
+      typeof window !== "undefined" &&
+      !path.includes("/api/admin/login")
+    ) {
       window.location.href = "/admin/login";
     }
     throw new AdminApiError("Unauthorized", 401);

@@ -63,6 +63,7 @@ const NAV: {
         quiet: true,
       },
       { icon: "se", label: "Settings", href: "/settings" },
+      { icon: "db", label: "Billing", href: "/billing" },
       { icon: "he", label: "Help", href: "/help" },
     ],
   },
@@ -155,7 +156,7 @@ export function Sidebar({
           </svg>
         </div>
         <div className="lb">
-          <b>Bundle Safety</b>
+          <b>StockSentry</b>
           <small>Inventory monitoring</small>
         </div>
       </div>

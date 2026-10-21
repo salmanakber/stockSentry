@@ -9,43 +9,52 @@ import { useShop } from "../../providers";
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const { ready, authenticated, authError, beginInstall } = useShop();
   const searchParams = useSearchParams();
-  const demo = searchParams.get("demo") === "1";
   const router = useRouter();
+  const demo = searchParams.get("demo") === "1";
+  const hasShopifyContext = Boolean(
+    searchParams.get("shop") ||
+      searchParams.get("host") ||
+      searchParams.get("embedded") === "1",
+  );
 
   useEffect(() => {
-    // Preserve demo flag across in-app navigation when present
-    if (!demo) return;
-  }, [demo, router]);
+    if (!ready) return;
+    if (authenticated || demo || hasShopifyContext) return;
+    router.replace("/");
+  }, [ready, authenticated, demo, hasShopifyContext, router]);
 
   if (!ready) {
     return (
-      <ConnectGate
-        message="Starting Bundle Safety…"
-        showConnect={false}
-      />
+      <ConnectGate message="Starting StockSentry…" showConnect={false} />
     );
   }
 
-  if (!authenticated && !demo) {
+  if (authenticated || demo) {
+    return <AppShell demo={demo}>{children}</AppShell>;
+  }
+
+  if (hasShopifyContext) {
     return (
       <ConnectGate
         message={
           authError ??
-          "Open Bundle Safety from Shopify Admin to connect your store."
+          "Open StockSentry from Shopify Admin to connect your store."
         }
         onConnect={beginInstall}
       />
     );
   }
 
-  return <AppShell demo={demo}>{children}</AppShell>;
+  return (
+    <ConnectGate message="Opening StockSentry…" showConnect={false} />
+  );
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense
       fallback={
-        <ConnectGate message="Starting Bundle Safety…" showConnect={false} />
+        <ConnectGate message="Starting StockSentry…" showConnect={false} />
       }
     >
       <AppLayoutInner>{children}</AppLayoutInner>

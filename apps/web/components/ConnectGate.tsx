@@ -22,7 +22,7 @@ export function ConnectGate({
             <path d="m9 12 2 2 4-4" />
           </svg>
         </div>
-        <h1>Bundle Safety</h1>
+        <h1>StockSentry</h1>
         <p>{message}</p>
         {showConnect && onConnect ? (
           <Button variant="primary" onClick={onConnect}>
