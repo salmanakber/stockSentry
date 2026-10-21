@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "../../../components/Button";
 import { Card, CardTitle } from "../../../components/Card";
 import { useShell } from "../../../components/AppShell";
@@ -8,12 +9,13 @@ import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { PageHeader } from "../../../components/shared/PageHeader";
 import { IncidentSummaryBadge } from "../../../components/IncidentBadge";
+import { ProductPickerModal } from "../../../components/ProductPickerModal";
 import { apiRequest } from "../../../lib/api";
+import { DEMO_BUNDLES } from "../../../lib/demo-data";
 import type {
   BundleGroup,
   BundlesListResponse,
   ProductItem,
-  ProductsListResponse,
 } from "../../../lib/types";
 import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
@@ -37,6 +39,9 @@ export default function BundlesPage() {
   const { shop } = useShop();
   const { ready } = useShell();
   const { showToast } = useToast();
+  const searchParams = useSearchParams();
+  const demo = searchParams.get("demo") === "1";
+
   const [groups, setGroups] = useState<BundleGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -45,15 +50,24 @@ export default function BundlesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editNotes, setEditNotes] = useState("");
-  const [searchQ, setSearchQ] = useState("");
-  const [hits, setHits] = useState<ProductItem[]>([]);
   const [role, setRole] = useState<(typeof ROLES)[number]>("COMPONENT");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [savingMeta, setSavingMeta] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
+      if (demo) {
+        setGroups(DEMO_BUNDLES);
+        setSelectedId((prev) => {
+          if (prev && DEMO_BUNDLES.some((g) => g.id === prev)) return prev;
+          return DEMO_BUNDLES[0]?.id ?? null;
+        });
+        return;
+      }
       const res = await apiRequest<BundlesListResponse>("/api/v1/bundles", {
         shop,
       });
@@ -63,12 +77,13 @@ export default function BundlesPage() {
         if (prev && next.some((g) => g.id === prev)) return prev;
         return next[0]?.id ?? null;
       });
-    } catch {
+    } catch (e) {
       setGroups([]);
+      setError(e instanceof Error ? e.message : "Failed to load bundle groups");
     } finally {
       setLoading(false);
     }
-  }, [shop]);
+  }, [demo, shop]);
 
   useEffect(() => {
     void load();
@@ -77,6 +92,11 @@ export default function BundlesPage() {
   const selected = useMemo(
     () => groups.find((g) => g.id === selectedId) ?? null,
     [groups, selectedId],
+  );
+
+  const attachedIds = useMemo(
+    () => new Set((selected?.items ?? []).map((i) => i.inventoryItemId)),
+    [selected],
   );
 
   useEffect(() => {
@@ -96,6 +116,10 @@ export default function BundlesPage() {
 
   const createGroup = async () => {
     if (!name.trim() || creating) return;
+    if (demo) {
+      showToast("Creating groups is disabled in demo mode");
+      return;
+    }
     setCreating(true);
     try {
       const created = await apiRequest<BundleGroup>("/api/v1/bundles", {
@@ -120,6 +144,10 @@ export default function BundlesPage() {
 
   const saveMeta = async () => {
     if (!selected || savingMeta) return;
+    if (demo) {
+      showToast("Editing is disabled in demo mode");
+      return;
+    }
     setSavingMeta(true);
     try {
       await apiRequest(`/api/v1/bundles/${encodeURIComponent(selected.id)}`, {
@@ -141,6 +169,10 @@ export default function BundlesPage() {
 
   const deleteGroup = async (id: string) => {
     if (busyId) return;
+    if (demo) {
+      showToast("Deleting is disabled in demo mode");
+      return;
+    }
     setBusyId(id);
     try {
       await apiRequest(`/api/v1/bundles/${encodeURIComponent(id)}`, {
@@ -157,50 +189,48 @@ export default function BundlesPage() {
     }
   };
 
-  const searchProducts = async () => {
-    const q = searchQ.trim();
-    if (!q) {
-      setHits([]);
-      return;
-    }
-    try {
-      const res = await apiRequest<ProductsListResponse>(
-        `/api/v1/products?q=${encodeURIComponent(q)}&page=1`,
-        { shop },
-      );
-      setHits(res?.items ?? []);
-    } catch {
-      setHits([]);
-    }
-  };
-
-  const addItem = async (inventoryItemId: string) => {
+  const addProducts = async (products: ProductItem[]) => {
     if (!selectedId) {
       showToast("Select a bundle group first");
       return;
     }
-    setBusyId(inventoryItemId);
+    if (demo) {
+      showToast("Adding products is disabled in demo mode");
+      return;
+    }
+    setBusyId("add");
     try {
-      await apiRequest(
-        `/api/v1/bundles/${encodeURIComponent(selectedId)}/items`,
-        {
-          method: "POST",
-          shop,
-          body: JSON.stringify({ inventoryItemId, role }),
-        },
+      let added = 0;
+      for (const p of products) {
+        if (attachedIds.has(p.id)) continue;
+        await apiRequest(
+          `/api/v1/bundles/${encodeURIComponent(selectedId)}/items`,
+          {
+            method: "POST",
+            shop,
+            body: JSON.stringify({ inventoryItemId: p.id, role }),
+          },
+        );
+        added += 1;
+      }
+      showToast(
+        added
+          ? `Added ${added} product${added === 1 ? "" : "s"}`
+          : "No new products to add",
       );
-      showToast("Item added to group");
-      setHits([]);
-      setSearchQ("");
       await load();
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Add item failed");
+      showToast(e instanceof Error ? e.message : "Add products failed");
     } finally {
       setBusyId(null);
     }
   };
 
   const removeItem = async (groupId: string, itemId: string) => {
+    if (demo) {
+      showToast("Removing is disabled in demo mode");
+      return;
+    }
     setBusyId(itemId);
     try {
       await apiRequest(
@@ -234,246 +264,247 @@ export default function BundlesPage() {
         </p>
       </Card>
 
-      <div className="bundle-studio-layout">
-        <aside className="bundle-studio-list">
-          <Card loading={loading}>
-            <CardTitle
-              title="Groups"
-              subtitle={
-                groups.length
-                  ? `${groups.length} group${groups.length === 1 ? "" : "s"}`
-                  : "No groups yet"
-              }
-            />
-
-            <div className="bundle-create">
-              <div className="field">
-                <label htmlFor="bg-name">New group name</label>
-                <input
-                  id="bg-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Gift set"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="bg-desc">Notes</label>
-                <textarea
-                  id="bg-desc"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Optional"
-                  rows={2}
-                />
-              </div>
-              <Button
-                variant="primary"
-                disabled={!name.trim() || creating}
-                onClick={() => void createGroup()}
-              >
-                {creating ? "Creating…" : "Create group"}
+      {error ? (
+        <Card>
+          <EmptyState
+            icon="bu"
+            title="Couldn’t load groups"
+            description={error}
+            action={
+              <Button variant="primary" onClick={() => void load()}>
+                Retry
               </Button>
-            </div>
-
-            {!groups.length && !loading ? (
-              <EmptyState
-                icon="bu"
-                title="No bundle groups"
-                description="Create a group for a kit or gift set, then add the products that make it up."
-              />
-            ) : (
-              <ul className="bundle-group-nav">
-                {groups.map((g) => {
-                  const count = g.items?.length ?? 0;
-                  const hot =
-                    Boolean(g.hasOpenIncidents) || Boolean(g.hasRefillRisk);
-                  return (
-                    <li key={g.id}>
-                      <button
-                        type="button"
-                        className={`bundle-nav-item${selectedId === g.id ? " on" : ""}${hot ? " hot" : ""}`}
-                        onClick={() => setSelectedId(g.id)}
-                      >
-                        <span className="bn-name">{g.name}</span>
-                        <span className="bn-meta">
-                          {count} component{count === 1 ? "" : "s"}
-                          {g.openComponentCount
-                            ? ` · ${g.openComponentCount} open`
-                            : ""}
-                          {g.hasRefillRisk ? " · refill" : ""}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
-        </aside>
-
-        <div className="bundle-studio-detail">
-          {!selected ? (
-            <Card>
-              <EmptyState
-                icon="bu"
-                title="Select a group"
-                description="Choose a bundle group on the left, or create one to start mapping components."
-              />
-            </Card>
-          ) : (
-            <Card>
+            }
+          />
+        </Card>
+      ) : (
+        <div className="bundle-studio-layout">
+          <aside className="bundle-studio-list">
+            <Card loading={loading}>
               <CardTitle
-                title={selected.name}
-                subtitle={selected.relationshipSource ?? "MANUAL"}
-                action={
-                  <Button
-                    disabled={busyId === selected.id}
-                    onClick={() => void deleteGroup(selected.id)}
-                  >
-                    Delete group
-                  </Button>
+                title="Groups"
+                subtitle={
+                  groups.length
+                    ? `${groups.length} group${groups.length === 1 ? "" : "s"}`
+                    : "No groups yet"
                 }
               />
 
-              <div className="field-row">
+              <div className="bundle-create">
                 <div className="field">
-                  <label htmlFor="edit-name">Name</label>
+                  <label htmlFor="bg-name">New group name</label>
                   <input
-                    id="edit-name"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
+                    id="bg-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Gift set"
+                    disabled={demo}
                   />
                 </div>
-              </div>
-              <div className="field">
-                <label htmlFor="edit-notes">Notes</label>
-                <textarea
-                  id="edit-notes"
-                  rows={2}
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                />
-              </div>
-              <div className="form-actions">
+                <div className="field">
+                  <label htmlFor="bg-desc">Notes</label>
+                  <textarea
+                    id="bg-desc"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Optional"
+                    rows={2}
+                    disabled={demo}
+                  />
+                </div>
                 <Button
                   variant="primary"
-                  disabled={savingMeta || !editName.trim()}
-                  onClick={() => void saveMeta()}
+                  disabled={!name.trim() || creating || demo}
+                  onClick={() => void createGroup()}
                 >
-                  {savingMeta ? "Saving…" : "Save details"}
+                  {creating ? "Creating…" : "Create group"}
                 </Button>
               </div>
 
-              <div className="ee-sec-title" style={{ marginTop: 8 }}>
-                Components
-              </div>
-              <div className="chip-row pl in bundle-chips">
-                {(selected.items ?? []).length ? (
-                  (selected.items ?? []).map((it) => {
-                    const summary =
-                      it.incidentSummary ?? it.inventoryItem?.incidentSummary;
-                    return (
-                      <div
-                        className={`bundle-chip${it.refillAtRisk ? " risk" : ""}`}
-                        key={it.id}
-                      >
-                        <div className="bc-top">
-                          <b>{itemLabel(it.inventoryItem)}</b>
-                          <button
-                            type="button"
-                            aria-label="Remove item"
-                            disabled={busyId === it.id}
-                            onClick={() => void removeItem(selected.id, it.id)}
-                          >
-                            ×
-                          </button>
-                        </div>
-                        <div className="bc-meta m">
-                          {it.role}
-                          {it.quantity != null ? ` · qty ${it.quantity}` : ""}
-                          {it.refillAtRisk
-                            ? ` · refill ≤ ${it.refillThreshold ?? 10}`
-                            : ""}
-                        </div>
-                        <IncidentSummaryBadge
-                          summary={summary}
-                          productId={it.inventoryItemId}
-                        />
-                      </div>
-                    );
-                  })
-                ) : (
-                  <EmptyState
-                    icon="bu"
-                    title="No components yet"
-                    description="Search products below and add them to this group."
-                  />
-                )}
-              </div>
-
-              <div className="ee-sec-title" style={{ marginTop: 18 }}>
-                Add product
-              </div>
-              <div className="field-row">
-                <div className="field">
-                  <label htmlFor="bg-role">Role</label>
-                  <select
-                    id="bg-role"
-                    value={role}
-                    onChange={(e) =>
-                      setRole(e.target.value as (typeof ROLES)[number])
-                    }
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="filters">
-                <input
-                  type="search"
-                  placeholder="Search products…"
-                  value={searchQ}
-                  onChange={(e) => setSearchQ(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void searchProducts();
-                  }}
-                  aria-label="Search products to add"
+              {!groups.length && !loading ? (
+                <EmptyState
+                  icon="bu"
+                  title="No bundle groups"
+                  description="Create a group for a kit or gift set, then add the products that make it up."
                 />
-                <Button onClick={() => void searchProducts()}>Search</Button>
-              </div>
-              {hits.length ? (
-                <div className="search-hits">
-                  {hits.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      disabled={busyId === p.id}
-                      onClick={() => void addItem(p.id)}
-                    >
-                      <b>{itemLabel(p)}</b>
-                      <div className="m mono">
-                        {p.sku ? `SKU ${p.sku}` : p.id}
-                      </div>
-                      <IncidentSummaryBadge
-                        summary={p.incidentSummary}
-                        productId={p.id}
-                      />
-                    </button>
-                  ))}
-                </div>
               ) : (
-                <p className="m" style={{ marginTop: 12 }}>
-                  Search to find inventory items to attach.
-                </p>
+                <ul className="bundle-group-nav">
+                  {groups.map((g) => {
+                    const count = g.items?.length ?? 0;
+                    const hot =
+                      Boolean(g.hasOpenIncidents) || Boolean(g.hasRefillRisk);
+                    return (
+                      <li key={g.id}>
+                        <button
+                          type="button"
+                          className={`bundle-nav-item${selectedId === g.id ? " on" : ""}${hot ? " hot" : ""}`}
+                          onClick={() => setSelectedId(g.id)}
+                        >
+                          <span className="bn-name">{g.name}</span>
+                          <span className="bn-meta">
+                            {count} component{count === 1 ? "" : "s"}
+                            {g.openComponentCount
+                              ? ` · ${g.openComponentCount} open`
+                              : ""}
+                            {g.hasRefillRisk ? " · refill" : ""}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </Card>
-          )}
+          </aside>
+
+          <div className="bundle-studio-detail">
+            {!selected ? (
+              <Card>
+                <EmptyState
+                  icon="bu"
+                  title="Select a group"
+                  description="Choose a bundle group on the left, or create one to start mapping components."
+                />
+              </Card>
+            ) : (
+              <Card>
+                <CardTitle
+                  title={selected.name}
+                  subtitle={selected.relationshipSource ?? "MANUAL"}
+                  action={
+                    <Button
+                      disabled={busyId === selected.id || demo}
+                      onClick={() => void deleteGroup(selected.id)}
+                    >
+                      Delete group
+                    </Button>
+                  }
+                />
+
+                <div className="field-row">
+                  <div className="field">
+                    <label htmlFor="edit-name">Name</label>
+                    <input
+                      id="edit-name"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      disabled={demo}
+                    />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="edit-notes">Notes</label>
+                  <textarea
+                    id="edit-notes"
+                    rows={2}
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    disabled={demo}
+                  />
+                </div>
+                <div className="form-actions">
+                  <Button
+                    variant="primary"
+                    disabled={savingMeta || !editName.trim() || demo}
+                    onClick={() => void saveMeta()}
+                  >
+                    {savingMeta ? "Saving…" : "Save details"}
+                  </Button>
+                </div>
+
+                <div className="ee-sec-title" style={{ marginTop: 8 }}>
+                  Components
+                </div>
+                <div className="chip-row pl in bundle-chips">
+                  {(selected.items ?? []).length ? (
+                    (selected.items ?? []).map((it) => {
+                      const summary =
+                        it.incidentSummary ?? it.inventoryItem?.incidentSummary;
+                      return (
+                        <div
+                          className={`bundle-chip${it.refillAtRisk ? " risk" : ""}`}
+                          key={it.id}
+                        >
+                          <div className="bc-top">
+                            <b>{itemLabel(it.inventoryItem)}</b>
+                            <button
+                              type="button"
+                              aria-label="Remove item"
+                              disabled={busyId === it.id || demo}
+                              onClick={() =>
+                                void removeItem(selected.id, it.id)
+                              }
+                            >
+                              ×
+                            </button>
+                          </div>
+                          <div className="bc-meta m">
+                            {it.role}
+                            {it.quantity != null ? ` · qty ${it.quantity}` : ""}
+                            {it.refillAtRisk
+                              ? ` · refill ≤ ${it.refillThreshold ?? 10}`
+                              : ""}
+                          </div>
+                          <IncidentSummaryBadge
+                            summary={summary}
+                            productId={it.inventoryItemId}
+                          />
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <EmptyState
+                      icon="bu"
+                      title="No components yet"
+                      description="Use Add products to attach inventory items to this group."
+                    />
+                  )}
+                </div>
+
+                <div className="ee-sec-title" style={{ marginTop: 18 }}>
+                  Add products
+                </div>
+                <div className="field-row">
+                  <div className="field">
+                    <label htmlFor="bg-role">Role for new items</label>
+                    <select
+                      id="bg-role"
+                      value={role}
+                      onChange={(e) =>
+                        setRole(e.target.value as (typeof ROLES)[number])
+                      }
+                    >
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="form-actions">
+                  <Button
+                    variant="primary"
+                    disabled={!selectedId || busyId === "add"}
+                    onClick={() => setPickerOpen(true)}
+                  >
+                    Add products…
+                  </Button>
+                </div>
+              </Card>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      <ProductPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={addProducts}
+        title="Add products to bundle"
+        confirmLabel="Add to group"
+        excludeIds={attachedIds}
+      />
     </div>
   );
 }

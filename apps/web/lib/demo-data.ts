@@ -1,6 +1,319 @@
-import type { OverviewResponse, IncidentRow } from "./types";
+import type {
+  BundleGroup,
+  IncidentRow,
+  IncidentSummary,
+  OverviewResponse,
+  ProductItem,
+  ProductsStatsResponse,
+  SupplierListItem,
+} from "./types";
 
-/** Design-QA sample payload — only used when `?demo=1`. Never used for live metrics. */
+/** Design-QA sample payload — only used when `?demo=1`. Never written to a live shop DB. */
+
+function summary(
+  openCount: number,
+  highestSeverity: IncidentSummary["highestSeverity"],
+  latestStatus: IncidentSummary["latestStatus"],
+  latestIncidentId: string | null,
+): IncidentSummary {
+  return { openCount, highestSeverity, latestStatus, latestIncidentId };
+}
+
+const LOC = {
+  a: { id: "loc-wh-a", name: "Warehouse A" },
+  b: { id: "loc-wh-b", name: "Warehouse B" },
+  r: { id: "loc-retail", name: "Retail Store" },
+} as const;
+
+export const DEMO_LOCATIONS = [
+  { id: LOC.a.id, name: LOC.a.name, active: true },
+  { id: LOC.b.id, name: LOC.b.name, active: true },
+  { id: LOC.r.id, name: LOC.r.name, active: true },
+];
+
+function obs(
+  quantity: number,
+  location: { id: string; name: string },
+  observedAt: string,
+) {
+  return [{ quantity, observedAt, location }];
+}
+
+/** Catalog used by Inventory, ProductPickerModal, and related ?demo=1 screens. */
+export const DEMO_PRODUCTS: ProductItem[] = [
+  {
+    id: "prod-aurora-candle",
+    productTitle: "Aurora Candle Gift Set",
+    variantTitle: "Default Title",
+    sku: "AUR-CND-GS",
+    tracked: true,
+    incidentSummary: summary(1, "HIGH", "NEW", "INC-0142"),
+    observations: obs(61, LOC.a, "2026-10-20T10:49:00Z"),
+  },
+  {
+    id: "prod-linen-napkin",
+    productTitle: "Linen Napkin 4-Pack",
+    variantTitle: "Natural",
+    sku: "LIN-NPK-4N",
+    tracked: true,
+    incidentSummary: summary(1, "HIGH", "INVESTIGATING", "INC-0141"),
+    observations: obs(96, LOC.a, "2026-10-20T09:55:00Z"),
+  },
+  {
+    id: "prod-bath-salts",
+    productTitle: "Bath Salts 200g",
+    variantTitle: "Lavender",
+    sku: "SPA-BSL-200",
+    tracked: true,
+    incidentSummary: summary(1, "HIGH", "NEW", "INC-0139"),
+    observations: obs(46, LOC.b, "2026-10-20T07:12:00Z"),
+  },
+  {
+    id: "prod-ceramic-mug",
+    productTitle: "Ceramic Mug",
+    variantTitle: "Sage",
+    sku: "CER-MUG-SG",
+    tracked: true,
+    incidentSummary: summary(1, "MEDIUM", "INVESTIGATING", "INC-0136"),
+    observations: obs(42, LOC.r, "2026-10-20T06:00:00Z"),
+  },
+  {
+    id: "prod-soy-wax",
+    productTitle: "Soy Wax Refill 250g",
+    variantTitle: "Default Title",
+    sku: "SWX-REF-250",
+    tracked: true,
+    incidentSummary: summary(1, "MEDIUM", "INVESTIGATING", "INC-0133"),
+    observations: obs(38, LOC.b, "2026-10-19T16:22:00Z"),
+  },
+  {
+    id: "prod-wooden-box",
+    productTitle: "Wooden Gift Box",
+    variantTitle: "Small",
+    sku: "WGB-SM",
+    tracked: true,
+    incidentSummary: summary(1, "LOW", "NEW", "INC-0130"),
+    observations: obs(12, LOC.a, "2026-10-19T08:00:00Z"),
+  },
+  {
+    id: "prod-tea-light",
+    productTitle: "Tea Light ×6",
+    variantTitle: "Warm White",
+    sku: "AUR-TL-6",
+    tracked: true,
+    incidentSummary: summary(0, null, null, null),
+    observations: obs(240, LOC.a, "2026-10-20T11:02:00Z"),
+  },
+  {
+    id: "prod-gift-wrap",
+    productTitle: "Gift Wrap",
+    variantTitle: "Kraft Roll",
+    sku: "PKG-WRAP-KR",
+    tracked: true,
+    incidentSummary: summary(0, null, null, null),
+    observations: obs(88, LOC.a, "2026-10-20T10:10:00Z"),
+  },
+  {
+    id: "prod-ribbon",
+    productTitle: "Ribbon",
+    variantTitle: "Sage 10m",
+    sku: "PKG-RIB-SG",
+    tracked: true,
+    incidentSummary: summary(0, null, null, null),
+    observations: obs(54, LOC.a, "2026-10-19T14:40:00Z"),
+  },
+  {
+    id: "prod-body-oil",
+    productTitle: "Body Oil",
+    variantTitle: "Citrus",
+    sku: "SPA-OIL-CT",
+    tracked: true,
+    incidentSummary: summary(0, null, null, null),
+    observations: obs(71, LOC.b, "2026-10-20T08:30:00Z"),
+  },
+  {
+    id: "prod-face-mask",
+    productTitle: "Face Mask",
+    variantTitle: "Clay Single",
+    sku: "SPA-MSK-CL",
+    tracked: true,
+    incidentSummary: summary(0, null, null, null),
+    observations: obs(120, LOC.b, "2026-10-20T08:31:00Z"),
+  },
+  {
+    id: "prod-pouch",
+    productTitle: "Pouch",
+    variantTitle: "Cotton Drawstring",
+    sku: "SPA-PCH-CT",
+    tracked: true,
+    incidentSummary: summary(0, null, null, null),
+    observations: obs(95, LOC.b, "2026-10-19T12:00:00Z"),
+  },
+  {
+    id: "prod-linen-charcoal",
+    productTitle: "Linen Napkin 4-Pack",
+    variantTitle: "Charcoal",
+    sku: "LIN-NPK-4C",
+    tracked: true,
+    incidentSummary: summary(0, null, null, null),
+    observations: obs(64, LOC.r, "2026-10-18T17:20:00Z"),
+  },
+  {
+    id: "prod-ceramic-cream",
+    productTitle: "Ceramic Mug",
+    variantTitle: "Cream",
+    sku: "CER-MUG-CR",
+    tracked: true,
+    incidentSummary: summary(0, null, null, null),
+    observations: obs(33, LOC.r, "2026-10-20T06:05:00Z"),
+  },
+];
+
+/** Open-incident product count matches DEMO_PRODUCTS with openCount > 0 (6). */
+export const DEMO_PRODUCTS_STATS: ProductsStatsResponse = {
+  monitoredCount: DEMO_PRODUCTS.length,
+  openIncidentProductCount: DEMO_PRODUCTS.filter(
+    (p) => (p.incidentSummary?.openCount ?? 0) > 0,
+  ).length,
+  lastVerifiedAt: "2026-10-20T09:55:00Z",
+  locationCount: DEMO_LOCATIONS.length,
+};
+
+export const DEMO_BUNDLES: BundleGroup[] = [
+  {
+    id: "bundle-aurora",
+    name: "Aurora Gift Collection",
+    description: "Candle set + linens + packaging for seasonal kits.",
+    relationshipSource: "MANUAL",
+    active: true,
+    hasOpenIncidents: true,
+    hasRefillRisk: true,
+    openComponentCount: 2,
+    items: [
+      {
+        id: "bi-1",
+        role: "BUNDLE",
+        inventoryItemId: "prod-aurora-candle",
+        quantity: 1,
+        refillAtRisk: true,
+        refillThreshold: 10,
+        openIncidents: 1,
+        incidentSummary: summary(1, "HIGH", "NEW", "INC-0142"),
+        inventoryItem: DEMO_PRODUCTS[0],
+      },
+      {
+        id: "bi-2",
+        role: "COMPONENT",
+        inventoryItemId: "prod-linen-napkin",
+        quantity: 1,
+        refillAtRisk: true,
+        refillThreshold: 10,
+        openIncidents: 1,
+        incidentSummary: summary(1, "HIGH", "INVESTIGATING", "INC-0141"),
+        inventoryItem: DEMO_PRODUCTS[1],
+      },
+      {
+        id: "bi-3",
+        role: "COMPONENT",
+        inventoryItemId: "prod-tea-light",
+        quantity: 1,
+        inventoryItem: DEMO_PRODUCTS[6],
+      },
+      {
+        id: "bi-4",
+        role: "COMPONENT",
+        inventoryItemId: "prod-gift-wrap",
+        quantity: 1,
+        inventoryItem: DEMO_PRODUCTS[7],
+      },
+      {
+        id: "bi-5",
+        role: "COMPONENT",
+        inventoryItemId: "prod-ribbon",
+        quantity: 1,
+        inventoryItem: DEMO_PRODUCTS[8],
+      },
+    ],
+  },
+  {
+    id: "bundle-spa",
+    name: "Spa Night Kit",
+    description: "Integration-derived mapping from kit SKU.",
+    relationshipSource: "INTEGRATION",
+    active: true,
+    hasOpenIncidents: true,
+    hasRefillRisk: true,
+    openComponentCount: 1,
+    items: [
+      {
+        id: "bi-6",
+        role: "COMPONENT",
+        inventoryItemId: "prod-bath-salts",
+        quantity: 1,
+        refillAtRisk: true,
+        refillThreshold: 10,
+        openIncidents: 1,
+        incidentSummary: summary(1, "HIGH", "NEW", "INC-0139"),
+        inventoryItem: DEMO_PRODUCTS[2],
+      },
+      {
+        id: "bi-7",
+        role: "COMPONENT",
+        inventoryItemId: "prod-body-oil",
+        quantity: 1,
+        inventoryItem: DEMO_PRODUCTS[9],
+      },
+      {
+        id: "bi-8",
+        role: "COMPONENT",
+        inventoryItemId: "prod-face-mask",
+        quantity: 1,
+        inventoryItem: DEMO_PRODUCTS[10],
+      },
+      {
+        id: "bi-9",
+        role: "COMPONENT",
+        inventoryItemId: "prod-pouch",
+        quantity: 1,
+        inventoryItem: DEMO_PRODUCTS[11],
+      },
+    ],
+  },
+];
+
+export const DEMO_SUPPLIERS: SupplierListItem[] = [
+  {
+    id: "sup-north-candle",
+    name: "Northwind Candle Co.",
+    contactEmail: "ops@northwind-candle.example",
+    contactName: "Priya Shah",
+    leadTimeDays: 7,
+    active: true,
+    itemCount: 3,
+    openIncidentCount: 2,
+  },
+  {
+    id: "sup-linen-mill",
+    name: "Harbor Linen Mill",
+    contactEmail: "fulfillment@harborlinen.example",
+    contactName: "James Okonkwo",
+    leadTimeDays: 14,
+    active: true,
+    itemCount: 2,
+    openIncidentCount: 1,
+  },
+  {
+    id: "sup-spa-essentials",
+    name: "Coastal Spa Essentials",
+    contactEmail: null,
+    leadTimeDays: 10,
+    active: true,
+    itemCount: 4,
+    openIncidentCount: 1,
+  },
+];
+
+/** Overview KPIs stay internally consistent with products / incidents / bundles. */
 export const DEMO_OVERVIEW: OverviewResponse = {
   shop: "northwind-home.myshopify.com",
   shopDisplay: "northwind-home",
@@ -44,10 +357,10 @@ export const DEMO_OVERVIEW: OverviewResponse = {
     },
     {
       label: "Monitored items",
-      value: 1284,
-      subtitle: "across 3 active locations",
+      value: DEMO_PRODUCTS.length,
+      subtitle: `across ${DEMO_LOCATIONS.length} active locations`,
       color: "var(--acc)",
-      sparkline: [1210, 1224, 1240, 1251, 1262, 1274, 1284],
+      sparkline: [10, 11, 12, 12, 13, 14, DEMO_PRODUCTS.length],
       stroke: "var(--acc)",
     },
   ],
@@ -80,6 +393,8 @@ export const DEMO_OVERVIEW: OverviewResponse = {
         { name: "Gift Wrap" },
         { name: "Ribbon" },
       ],
+      openComponentCount: 2,
+      componentCount: 5,
     },
     {
       name: "Spa Night Kit",
@@ -90,6 +405,8 @@ export const DEMO_OVERVIEW: OverviewResponse = {
         { name: "Face Mask" },
         { name: "Pouch" },
       ],
+      openComponentCount: 1,
+      componentCount: 4,
     },
   ],
   aiReports: {
@@ -116,6 +433,14 @@ export const DEMO_OVERVIEW: OverviewResponse = {
     name: "northwind-home",
     role: "Owner · read-only access",
   },
+  supplierRisk: {
+    linkedItems: DEMO_SUPPLIERS.reduce((n, s) => n + (s.itemCount ?? 0), 0),
+    openIncidents: DEMO_SUPPLIERS.reduce(
+      (n, s) => n + (s.openIncidentCount ?? 0),
+      0,
+    ),
+  },
+  refillAttention: { count: 3, threshold: 10 },
 };
 
 export const DEMO_INCIDENTS: IncidentRow[] = [
@@ -133,6 +458,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     status: "new",
     statusColor: "var(--hot)",
     detectedAt: "12 min ago",
+    inventoryItemId: "prod-aurora-candle",
     evidence: {
       confirmed:
         "2 observations from inventory_levels/update, 10:41 → 10:49. Prior quantity 148 was observed at 10:41.",
@@ -156,6 +482,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     status: "investigating",
     statusColor: "var(--warn)",
     detectedAt: "1 h ago",
+    inventoryItemId: "prod-linen-napkin",
     evidence: {
       confirmed:
         "Last webhook observation was 214 at 07:12. Inventory verification at 09:55 read 96 from Shopify.",
@@ -179,6 +506,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     status: "new",
     statusColor: "var(--hot)",
     detectedAt: "3 h ago",
+    inventoryItemId: "prod-bath-salts",
     evidence: {
       confirmed:
         "Two consecutive webhook reads show 46 after a stable run of 92.",
@@ -201,6 +529,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     status: "investigating",
     statusColor: "var(--warn)",
     detectedAt: "Yesterday",
+    inventoryItemId: "prod-ceramic-mug",
     evidence: {
       confirmed:
         "Last observed 57 (webhook, 18:20). Shopify current 42 at the 06:00 inventory verification.",
@@ -223,6 +552,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     status: "investigating",
     statusColor: "var(--warn)",
     detectedAt: "Yesterday",
+    inventoryItemId: "prod-soy-wax",
     evidence: {
       confirmed:
         "6 observations inside a 10-minute window, grouped into one incident (30-minute suppression).",
@@ -244,6 +574,7 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
     status: "new",
     statusColor: "#98a2b3",
     detectedAt: "Yesterday",
+    inventoryItemId: "prod-wooden-box",
     evidence: {
       confirmed:
         "Only a baseline observation exists. No prior quantity is known, so none is shown.",
@@ -255,4 +586,52 @@ export const DEMO_INCIDENTS: IncidentRow[] = [
 
 export function getDemoOverview(): OverviewResponse {
   return { ...DEMO_OVERVIEW, recentIncidents: DEMO_INCIDENTS };
+}
+
+export function filterDemoProducts(opts: {
+  q?: string;
+  locationId?: string;
+  hasOpenIncident?: boolean;
+  page?: number;
+  pageSize?: number;
+}): {
+  items: ProductItem[];
+  locations: typeof DEMO_LOCATIONS;
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+} {
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = opts.pageSize ?? 50;
+  const needle = (opts.q ?? "").trim().toLowerCase();
+
+  let items = DEMO_PRODUCTS.filter((p) => {
+    if (opts.hasOpenIncident && !(p.incidentSummary?.openCount ?? 0)) {
+      return false;
+    }
+    if (opts.locationId) {
+      const loc = p.observations?.[0]?.location?.id;
+      if (loc !== opts.locationId) return false;
+    }
+    if (!needle) return true;
+    const hay = [p.productTitle, p.variantTitle, p.sku]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(needle);
+  });
+
+  const total = items.length;
+  const start = (page - 1) * pageSize;
+  items = items.slice(start, start + pageSize);
+
+  return {
+    items,
+    locations: DEMO_LOCATIONS,
+    page,
+    pageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }

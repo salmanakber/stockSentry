@@ -18,12 +18,55 @@ import {
 
 export const productsRouter = Router();
 
+productsRouter.get("/products/stats", requireMerchant, async (req, res, next) => {
+  try {
+    const shopId = req.shopId!;
+    const [monitoredCount, openIncidentGroups, locationCount, shop] =
+      await Promise.all([
+        prisma.inventoryItem.count({
+          where: { shopId, deletedAt: null, tracked: true },
+        }),
+        prisma.incident.groupBy({
+          by: ["inventoryItemId"],
+          where: {
+            shopId,
+            inventoryItemId: { not: null },
+            status: { in: ["NEW", "INVESTIGATING"] },
+          },
+        }),
+        prisma.inventoryLocation.count({
+          where: { shopId, active: true },
+        }),
+        prisma.shop.findUnique({
+          where: { id: shopId },
+          select: { lastReconciledAt: true },
+        }),
+      ]);
+
+    res.json({
+      monitoredCount,
+      openIncidentProductCount: openIncidentGroups.filter(
+        (g) => g.inventoryItemId != null,
+      ).length,
+      lastVerifiedAt: shop?.lastReconciledAt?.toISOString() ?? null,
+      locationCount,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 productsRouter.get("/products", requireMerchant, async (req, res, next) => {
   try {
     const shopId = req.shopId!;
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = 50;
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const locationId =
+      typeof req.query.locationId === "string" ? req.query.locationId.trim() : "";
+    const hasOpenIncident =
+      req.query.hasOpenIncident === "1" ||
+      req.query.hasOpenIncident === "true";
 
     const where = {
       shopId,
@@ -35,6 +78,22 @@ productsRouter.get("/products", requireMerchant, async (req, res, next) => {
               { variantTitle: { contains: q, mode: "insensitive" as const } },
               { sku: { contains: q, mode: "insensitive" as const } },
             ],
+          }
+        : {}),
+      ...(locationId
+        ? {
+            observations: {
+              some: { locationId },
+            },
+          }
+        : {}),
+      ...(hasOpenIncident
+        ? {
+            incidents: {
+              some: {
+                status: { in: ["NEW" as const, "INVESTIGATING" as const] },
+              },
+            },
           }
         : {}),
     };

@@ -42,6 +42,7 @@ apiRouter.get("/", (_req, res) => {
       incidents: "/api/v1/incidents",
       history: "/api/v1/history",
       products: "/api/v1/products",
+      productsStats: "/api/v1/products/stats",
       productDetail: "/api/v1/products/:id",
       productReport: "/api/v1/products/:id/report",
       sync: "/api/v1/sync",

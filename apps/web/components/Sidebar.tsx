@@ -47,7 +47,7 @@ const NAV: {
   {
     group: "Catalog",
     items: [
-      { icon: "pr", label: "Products & Locations", href: "/products" },
+      { icon: "pr", label: "Inventory", href: "/products" },
       { icon: "bu", label: "Bundle Groups", href: "/bundles" },
       { icon: "db", label: "Suppliers", href: "/suppliers" },
     ],

@@ -227,6 +227,13 @@ export interface ProductsListResponse extends Partial<PaginatedMeta> {
   locations?: Array<{ id: string; name: string; active?: boolean }>;
 }
 
+export interface ProductsStatsResponse {
+  monitoredCount: number;
+  openIncidentProductCount: number;
+  lastVerifiedAt?: string | null;
+  locationCount?: number;
+}
+
 export interface ProductDetailResponse {
   item: {
     id: string;

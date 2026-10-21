@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "../../../../components/Button";
@@ -9,12 +9,9 @@ import { useShell } from "../../../../components/AppShell";
 import { useToast } from "../../../../components/Toast";
 import { EmptyState } from "../../../../components/shared/EmptyState";
 import { PageHeader } from "../../../../components/shared/PageHeader";
+import { ProductPickerModal } from "../../../../components/ProductPickerModal";
 import { apiRequest } from "../../../../lib/api";
-import type {
-  ProductItem,
-  ProductsListResponse,
-  SupplierDetail,
-} from "../../../../lib/types";
+import type { ProductItem, SupplierDetail } from "../../../../lib/types";
 import { useShop } from "../../../../providers";
 import { useReveal } from "../../../../hooks/useReveal";
 
@@ -46,8 +43,7 @@ export default function SupplierDetailPage() {
   const [contactName, setContactName] = useState("");
   const [notes, setNotes] = useState("");
   const [leadTimeDays, setLeadTimeDays] = useState("");
-  const [searchQ, setSearchQ] = useState("");
-  const [hits, setHits] = useState<ProductItem[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -77,6 +73,11 @@ export default function SupplierDetailPage() {
   }, [load]);
 
   useReveal(ready && !loading, null, [data, ready, loading]);
+
+  const attachedIds = useMemo(
+    () => new Set((data?.items ?? []).map((i) => i.inventoryItemId)),
+    [data],
+  );
 
   const save = async () => {
     if (saving) return;
@@ -119,35 +120,25 @@ export default function SupplierDetailPage() {
     }
   };
 
-  const searchProducts = async () => {
-    const q = searchQ.trim();
-    if (!q) {
-      setHits([]);
-      return;
-    }
-    try {
-      const res = await apiRequest<ProductsListResponse>(
-        `/api/v1/products?q=${encodeURIComponent(q)}&page=1`,
-        { shop },
-      );
-      setHits(res?.items ?? []);
-    } catch {
-      setHits([]);
-    }
-  };
-
-  const attach = async (inventoryItemId: string) => {
+  const attachProducts = async (products: ProductItem[]) => {
     if (busy) return;
     setBusy(true);
     try {
-      await apiRequest(`/api/v1/suppliers/${encodeURIComponent(id)}/items`, {
-        method: "POST",
-        shop,
-        body: JSON.stringify({ inventoryItemId }),
-      });
-      showToast("Product attached");
-      setSearchQ("");
-      setHits([]);
+      let added = 0;
+      for (const p of products) {
+        if (attachedIds.has(p.id)) continue;
+        await apiRequest(`/api/v1/suppliers/${encodeURIComponent(id)}/items`, {
+          method: "POST",
+          shop,
+          body: JSON.stringify({ inventoryItemId: p.id }),
+        });
+        added += 1;
+      }
+      showToast(
+        added
+          ? `Attached ${added} product${added === 1 ? "" : "s"}`
+          : "No new products to attach",
+      );
       await load();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Attach failed");
@@ -270,34 +261,19 @@ export default function SupplierDetailPage() {
             <Card>
               <CardTitle
                 title="Attach products"
-                subtitle="Search catalog and link SKUs"
+                subtitle="Select catalog items to link"
               />
-              <div className="filters">
-                <input
-                  type="search"
-                  placeholder="Search title or SKU…"
-                  value={searchQ}
-                  onChange={(e) => setSearchQ(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void searchProducts();
-                  }}
-                />
-                <Button onClick={() => void searchProducts()}>Search</Button>
-              </div>
-              {hits.map((h) => (
-                <div className="list-row" key={h.id}>
-                  <div>
-                    <b>{itemLabel(h)}</b>
-                    <div className="m mono">{h.sku ?? "No SKU"}</div>
-                  </div>
-                  <Button
-                    disabled={busy}
-                    onClick={() => void attach(h.id)}
-                  >
-                    Attach
-                  </Button>
-                </div>
-              ))}
+              <p className="m" style={{ marginTop: 0 }}>
+                Link SKUs so open incidents on those items surface supplier
+                context on Overview and here.
+              </p>
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={() => setPickerOpen(true)}
+              >
+                Add products…
+              </Button>
             </Card>
           </div>
 
@@ -311,7 +287,7 @@ export default function SupplierDetailPage() {
                 <EmptyState
                   icon="pr"
                   title="No products linked"
-                  description="Search and attach inventory items."
+                  description="Use Add products to attach inventory items."
                 />
               ) : (
                 data.items.map((link) => (
@@ -379,6 +355,15 @@ export default function SupplierDetailPage() {
           </div>
         </div>
       )}
+
+      <ProductPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={attachProducts}
+        title="Attach products to supplier"
+        confirmLabel="Attach"
+        excludeIds={attachedIds}
+      />
     </div>
   );
 }

@@ -360,3 +360,55 @@ a.btn{color:var(--ink)}a.btn.p{color:#fff}
 .bundle-chip .bc-top b{font-size:13px;font-weight:600}
 .bundle-chip .bc-top button{border:0;background:transparent;color:var(--mut);cursor:pointer;font-size:16px;line-height:1;padding:0}
 .bundle-chip .bc-meta{margin-top:4px}
+
+/* Product picker modal */
+.ppm-overlay{position:fixed;inset:0;z-index:80;background:rgba(16,24,40,.42);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px 16px;animation:ppmIn .25s var(--ease)}
+@keyframes ppmIn{from{opacity:0}}
+.ppm{width:100%;max-width:880px;max-height:min(92vh,820px);background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 64px -28px rgba(16,24,40,.45);display:flex;flex-direction:column;overflow:hidden;animation:ppmUp .35s var(--ease)}
+@keyframes ppmUp{from{opacity:0;transform:translateY(12px) scale(.98)}}
+.ppm-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+.ppm-head h2{margin:0;font-size:18px;letter-spacing:-.02em}
+.ppm-head .m{margin:4px 0 0}
+.ppm-close{border:0;background:var(--soft);width:32px;height:32px;border-radius:10px;font-size:20px;line-height:1;color:var(--mut);cursor:pointer}
+.ppm-close:hover{color:var(--ink)}
+.ppm-search{display:flex;gap:8px;padding:12px 20px;border-bottom:1px solid var(--line)}
+.ppm-search input{flex:1;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;background:var(--soft)}
+.ppm-chips{padding:10px 20px 0;max-height:72px;overflow:auto}
+.ppm-body{flex:1;min-height:0;overflow:auto;padding:8px 12px 12px}
+.ppm-list{list-style:none;margin:0;padding:0}
+.ppm-row{display:flex;align-items:flex-start;gap:12px;padding:12px 10px;border-radius:12px;cursor:pointer;border:1px solid transparent}
+.ppm-row:hover{background:var(--soft)}
+.ppm-row.on{background:var(--accs);border-color:rgba(0,128,96,.22)}
+.ppm-row input{margin-top:3px;width:16px;height:16px;accent-color:var(--acc);flex:none}
+.ppm-row-main{min-width:0;flex:1}
+.ppm-row-main b{display:block;font-weight:600;font-size:13.5px}
+.ppm-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line);background:#fff}
+
+/* Inventory */
+.inv-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}
+@media (max-width:900px){.inv-stats{grid-template-columns:1fr}}
+.inv-stat .inv-stat-label{font:500 10.5px/1 "JetBrains Mono",monospace;letter-spacing:.07em;text-transform:uppercase;color:#98a2b3}
+.inv-stat .inv-stat-value{font-size:28px;font-weight:700;letter-spacing:-.03em;margin-top:8px;line-height:1.15}
+.inv-stat .inv-stat-value.sm{font-size:18px;font-weight:650}
+.inv-stat .inv-stat-value.hot{color:var(--hot)}
+.inv-stat .inv-stat-sub{margin-top:6px}
+.inv-filters{flex-wrap:wrap;align-items:center}
+.inv-filters select{border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;background:#fff;min-width:140px}
+.inv-check{margin:0;padding:0 4px;white-space:nowrap}
+.inv-name{color:var(--ink);font-weight:600;text-decoration:none}
+.inv-name:hover{color:var(--acc)}
+.inv-table .incident-badge{margin-top:0}
+
+/* Help center */
+.help-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.help-hero-copy{flex:1;min-width:220px}
+.help-search{width:100%;max-width:480px;border:1px solid var(--line);border-radius:12px;padding:11px 14px;font:inherit;background:var(--soft);margin-top:4px}
+.help-hero-actions{display:flex;gap:8px;flex-wrap:wrap}
+.help-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px}
+.help-cat{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:#fff;text-decoration:none;color:inherit;transition:border-color .2s,box-shadow .2s,transform .25s var(--spring)}
+.help-cat:hover{border-color:var(--acc);box-shadow:0 10px 24px -18px rgba(0,128,96,.45);transform:translateY(-1px)}
+.help-cat b{font-size:13.5px;letter-spacing:-.01em}
+.help-cat span{font-size:12.5px;color:var(--mut);line-height:1.4}
+.help-sec-card{margin-bottom:14px;scroll-margin-top:88px}
+.help-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.help-center .help-sec:last-child{margin-bottom:0}
