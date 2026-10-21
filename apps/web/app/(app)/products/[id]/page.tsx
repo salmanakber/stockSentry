@@ -9,6 +9,7 @@ import { useShell } from "../../../../components/AppShell";
 import { useToast } from "../../../../components/Toast";
 import { EmptyState } from "../../../../components/shared/EmptyState";
 import { PageHeader } from "../../../../components/shared/PageHeader";
+import { IncidentSummaryBadge } from "../../../../components/IncidentBadge";
 import { apiRequest } from "../../../../lib/api";
 import type { ProductDetailResponse } from "../../../../lib/types";
 import { useShop } from "../../../../providers";
@@ -112,7 +113,15 @@ export default function ProductReportPage() {
   return (
     <div className="pg">
       <PageHeader
-        title={productTitle(data?.item)}
+        title={
+          <span className="product-title-row">
+            {productTitle(data?.item)}
+            <IncidentSummaryBadge
+              summary={data?.item?.incidentSummary}
+              productId={data?.item?.id}
+            />
+          </span>
+        }
         subtitle={
           data?.item?.sku ? (
             <span className="mono">SKU {data.item.sku}</span>

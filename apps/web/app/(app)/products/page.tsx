@@ -9,6 +9,7 @@ import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { PageHeader } from "../../../components/shared/PageHeader";
+import { IncidentSummaryBadge } from "../../../components/IncidentBadge";
 import { apiRequest } from "../../../lib/api";
 import type { ProductItem, ProductsListResponse } from "../../../lib/types";
 import { useShop } from "../../../providers";
@@ -164,6 +165,10 @@ export default function ProductsPage() {
                           ? ` · ${last.location.name}`
                           : ""}
                       </div>
+                      <IncidentSummaryBadge
+                        summary={item.incidentSummary}
+                        productId={item.id}
+                      />
                     </div>
                     <div className="q" style={{ textAlign: "right" }}>
                       {last?.quantity != null ? last.quantity : "—"}

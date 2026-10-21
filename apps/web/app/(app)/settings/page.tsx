@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../components/Button";
 import { Card, CardTitle } from "../../../components/Card";
 import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { PageHeader } from "../../../components/shared/PageHeader";
+import { EmailTemplateEditor } from "../../../components/email/EmailTemplateEditor";
 import { apiRequest } from "../../../lib/api";
 import type {
   BillingStatusResponse,
@@ -21,6 +24,18 @@ import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
 
 const SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
+
+const TABS = [
+  { id: "monitoring", label: "Monitoring" },
+  { id: "detection", label: "Detection" },
+  { id: "notifications", label: "Notifications" },
+  { id: "email", label: "Email" },
+  { id: "ai", label: "AI" },
+  { id: "billing", label: "Billing" },
+  { id: "general", label: "General" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
 
 type PrefChannel = "IN_APP" | "EMAIL";
 
@@ -53,10 +68,26 @@ function planFeatureBullets(plan: MerchantPlan): string[] {
   return bullets;
 }
 
+function isTabId(v: string | null): v is TabId {
+  return TABS.some((t) => t.id === v);
+}
+
 export default function SettingsPage() {
   const { shop } = useShop();
   const { ready } = useShell();
   const { showToast } = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const activeTab: TabId = isTabId(tabParam) ? tabParam : "monitoring";
+
+  const setTab = (id: TabId) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", id);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [intervalHours, setIntervalHours] = useState(6);
@@ -78,6 +109,9 @@ export default function SettingsPage() {
   const [tplSubject, setTplSubject] = useState("");
   const [tplHtml, setTplHtml] = useState("");
   const [tplText, setTplText] = useState("");
+  const [tplRevision, setTplRevision] = useState(0);
+  const [aiSettings, setAiSettings] = useState<Record<string, unknown>>({});
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [billing, setBilling] = useState<BillingStatusResponse | null>(null);
   const [plans, setPlans] = useState<MerchantPlan[]>([]);
   const [subscribeBusy, setSubscribeBusy] = useState<string | null>(null);
@@ -102,6 +136,12 @@ export default function SettingsPage() {
     };
     setRefillThreshold(num(monitoring.refillThreshold, 10));
     setRules(res.detectionRules ?? []);
+    setAiSettings(
+      (res.settings?.ai && typeof res.settings.ai === "object"
+        ? (res.settings.ai as Record<string, unknown>)
+        : {}) ?? {},
+    );
+    setOnboardingCompleted(Boolean(res.shop?.onboardingCompleted));
     const next: PrefState = {
       IN_APP: { enabled: true, minSeverity: "MEDIUM", destinationRef: "" },
       EMAIL: { enabled: false, minSeverity: "HIGH", destinationRef: "" },
@@ -125,6 +165,7 @@ export default function SettingsPage() {
       setTplSubject(active.subject);
       setTplHtml(active.htmlBody);
       setTplText(active.textBody);
+      setTplRevision((n) => n + 1);
     }
   };
 
@@ -157,7 +198,7 @@ export default function SettingsPage() {
     void load();
   }, [load]);
 
-  useReveal(ready && !loading, null, [rules, billing, ready, loading]);
+  useReveal(ready && !loading, null, [rules, billing, ready, loading, activeTab]);
 
   const save = async () => {
     if (saving) return;
@@ -190,6 +231,7 @@ export default function SettingsPage() {
             enabled: r.enabled,
           })),
           notificationPreferences,
+          ai: aiSettings,
         }),
       });
       applySettings(res);
@@ -252,8 +294,19 @@ export default function SettingsPage() {
       setTplSubject(t.subject);
       setTplHtml(t.htmlBody);
       setTplText(t.textBody);
+      setTplRevision((n) => n + 1);
     }
   };
+
+  const onCompiledChange = useCallback((html: string, text: string) => {
+    setTplHtml(html);
+    setTplText(text);
+  }, []);
+
+  const editorResetKey = useMemo(
+    () => `${activeTplKey}:${tplRevision}`,
+    [activeTplKey, tplRevision],
+  );
 
   const subscribe = async (planSlug: string) => {
     if (subscribeBusy) return;
@@ -284,17 +337,39 @@ export default function SettingsPage() {
     setThresholds((t) => ({ ...t, [key]: value }));
   };
 
+  const showSave =
+    activeTab === "monitoring" ||
+    activeTab === "detection" ||
+    activeTab === "notifications" ||
+    activeTab === "ai" ||
+    activeTab === "general";
+
   return (
     <div className="pg">
       <PageHeader
         title="Settings"
-        subtitle="Monitoring interval, rules, and notification preferences."
+        subtitle="Monitoring, detection, notifications, and billing."
         actions={
-          <Button variant="primary" disabled={saving} onClick={() => void save()}>
-            {saving ? "Saving…" : "Save settings"}
-          </Button>
+          showSave ? (
+            <Button variant="primary" disabled={saving} onClick={() => void save()}>
+              {saving ? "Saving…" : "Save settings"}
+            </Button>
+          ) : undefined
         }
       />
+
+      <nav className="settings-tabs" aria-label="Settings sections">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={activeTab === t.id ? "on" : undefined}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
       {loading ? (
         <Card loading>
@@ -305,415 +380,478 @@ export default function SettingsPage() {
           />
         </Card>
       ) : (
-        <div className="col2" style={{ gap: 16, display: "flex" }}>
-          <Card>
-            <CardTitle
-              title="Monitoring"
-              subtitle="Reconciliation cadence and detection thresholds"
-            />
-            <div className="field-row">
-              <div className="field">
-                <label htmlFor="rec-hours">Reconciliation interval (hours)</label>
-                <input
-                  id="rec-hours"
-                  type="number"
-                  min={1}
-                  value={intervalHours}
-                  onChange={(e) =>
-                    setIntervalHours(Math.max(1, Number(e.target.value) || 1))
-                  }
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="refill-th">Refill threshold (qty)</label>
-                <input
-                  id="refill-th"
-                  type="number"
-                  min={0}
-                  value={refillThreshold}
-                  onChange={(e) =>
-                    setRefillThreshold(Math.max(0, Number(e.target.value) || 0))
-                  }
-                />
-              </div>
-            </div>
-            <p className="m" style={{ marginBottom: 12 }}>
-              When observed quantity at a location is at or below the refill
-              threshold, StockSentry opens a refill suggestion (alert only — never
-              writes inventory to Shopify).
-            </p>
-            <div className="field-row">
-              <div className="field">
-                <label htmlFor="th-abs">Absolute change</label>
-                <input
-                  id="th-abs"
-                  type="number"
-                  value={thresholds.absoluteChangeThreshold ?? 30}
-                  onChange={(e) =>
-                    setThreshold(
-                      "absoluteChangeThreshold",
-                      Number(e.target.value),
-                    )
-                  }
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="th-pct">Percent change</label>
-                <input
-                  id="th-pct"
-                  type="number"
-                  value={thresholds.percentageChangeThreshold ?? 50}
-                  onChange={(e) =>
-                    setThreshold(
-                      "percentageChangeThreshold",
-                      Number(e.target.value),
-                    )
-                  }
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="th-base">Min baseline</label>
-                <input
-                  id="th-base"
-                  type="number"
-                  value={thresholds.minBaselineForPercentage ?? 20}
-                  onChange={(e) =>
-                    setThreshold(
-                      "minBaselineForPercentage",
-                      Number(e.target.value),
-                    )
-                  }
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="th-win">Repeated window (min)</label>
-                <input
-                  id="th-win"
-                  type="number"
-                  value={thresholds.repeatedChangeWindowMinutes ?? 10}
-                  onChange={(e) =>
-                    setThreshold(
-                      "repeatedChangeWindowMinutes",
-                      Number(e.target.value),
-                    )
-                  }
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="th-sup">Suppression (min)</label>
-                <input
-                  id="th-sup"
-                  type="number"
-                  value={thresholds.duplicateSuppressionMinutes ?? 30}
-                  onChange={(e) =>
-                    setThreshold(
-                      "duplicateSuppressionMinutes",
-                      Number(e.target.value),
-                    )
-                  }
-                />
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <CardTitle
-              title="Detection rules"
-              subtitle="Toggle which deterministic rules can open incidents"
-            />
-            {!rules.length ? (
-              <EmptyState
-                icon="se"
-                title="No rules configured"
-                description="Rules are seeded on install. Sync or reinstall if this list stays empty."
+        <>
+          {activeTab === "monitoring" ? (
+            <Card>
+              <CardTitle
+                title="Monitoring"
+                subtitle="Reconciliation cadence and refill threshold"
               />
-            ) : (
-              rules.map((r) => (
-                <label className="field-check" key={r.ruleType}>
+              <div className="field-row">
+                <div className="field">
+                  <label htmlFor="rec-hours">Reconciliation interval (hours)</label>
                   <input
-                    type="checkbox"
-                    checked={r.enabled}
+                    id="rec-hours"
+                    type="number"
+                    min={1}
+                    value={intervalHours}
                     onChange={(e) =>
-                      setRules((prev) =>
-                        prev.map((x) =>
-                          x.ruleType === r.ruleType
-                            ? { ...x, enabled: e.target.checked }
-                            : x,
-                        ),
+                      setIntervalHours(Math.max(1, Number(e.target.value) || 1))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="refill-th">Refill threshold (qty)</label>
+                  <input
+                    id="refill-th"
+                    type="number"
+                    min={0}
+                    value={refillThreshold}
+                    onChange={(e) =>
+                      setRefillThreshold(Math.max(0, Number(e.target.value) || 0))
+                    }
+                  />
+                </div>
+              </div>
+              <p className="m" style={{ marginBottom: 12 }}>
+                When observed quantity at a location is at or below the refill
+                threshold, StockSentry opens a refill suggestion (alert only — never
+                writes inventory to Shopify).
+              </p>
+              <div className="field-row">
+                <div className="field">
+                  <label htmlFor="th-abs">Absolute change</label>
+                  <input
+                    id="th-abs"
+                    type="number"
+                    value={thresholds.absoluteChangeThreshold ?? 30}
+                    onChange={(e) =>
+                      setThreshold(
+                        "absoluteChangeThreshold",
+                        Number(e.target.value),
                       )
                     }
                   />
-                  <span>{r.ruleType.replace(/_/g, " ")}</span>
-                </label>
-              ))
-            )}
-          </Card>
-
-          <Card>
-            <CardTitle
-              title="Notifications"
-              subtitle="In-app and email delivery preferences"
-            />
-            {(["IN_APP", "EMAIL"] as PrefChannel[]).map((channel) => (
-              <div key={channel} style={{ marginBottom: 16 }}>
-                <label className="field-check">
+                </div>
+                <div className="field">
+                  <label htmlFor="th-pct">Percent change</label>
                   <input
-                    type="checkbox"
-                    checked={prefs[channel].enabled}
+                    id="th-pct"
+                    type="number"
+                    value={thresholds.percentageChangeThreshold ?? 50}
                     onChange={(e) =>
-                      setPrefs((p) => ({
-                        ...p,
-                        [channel]: {
-                          ...p[channel],
-                          enabled: e.target.checked,
-                        },
-                      }))
+                      setThreshold(
+                        "percentageChangeThreshold",
+                        Number(e.target.value),
+                      )
                     }
                   />
-                  <span>{channel === "IN_APP" ? "In-app" : "Email"} enabled</span>
-                </label>
-                <div className="field" style={{ marginBottom: 0 }}>
-                  <label htmlFor={`sev-${channel}`}>Min severity</label>
-                  <select
-                    id={`sev-${channel}`}
-                    value={prefs[channel].minSeverity}
-                    onChange={(e) =>
-                      setPrefs((p) => ({
-                        ...p,
-                        [channel]: {
-                          ...p[channel],
-                          minSeverity: e.target.value,
-                        },
-                      }))
-                    }
-                  >
-                    {SEVERITIES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
                 </div>
-                {channel === "EMAIL" ? (
-                  <div className="field" style={{ marginTop: 12 }}>
-                    <label htmlFor="email-dest">Alert email address</label>
+                <div className="field">
+                  <label htmlFor="th-base">Min baseline</label>
+                  <input
+                    id="th-base"
+                    type="number"
+                    value={thresholds.minBaselineForPercentage ?? 20}
+                    onChange={(e) =>
+                      setThreshold(
+                        "minBaselineForPercentage",
+                        Number(e.target.value),
+                      )
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="th-win">Repeated window (min)</label>
+                  <input
+                    id="th-win"
+                    type="number"
+                    value={thresholds.repeatedChangeWindowMinutes ?? 10}
+                    onChange={(e) =>
+                      setThreshold(
+                        "repeatedChangeWindowMinutes",
+                        Number(e.target.value),
+                      )
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="th-sup">Suppression (min)</label>
+                  <input
+                    id="th-sup"
+                    type="number"
+                    value={thresholds.duplicateSuppressionMinutes ?? 30}
+                    onChange={(e) =>
+                      setThreshold(
+                        "duplicateSuppressionMinutes",
+                        Number(e.target.value),
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            </Card>
+          ) : null}
+
+          {activeTab === "detection" ? (
+            <Card>
+              <CardTitle
+                title="Detection rules"
+                subtitle="Toggle which deterministic rules can open incidents"
+              />
+              {!rules.length ? (
+                <EmptyState
+                  icon="se"
+                  title="No rules configured"
+                  description="Rules are seeded on install. Sync or reinstall if this list stays empty."
+                />
+              ) : (
+                rules.map((r) => (
+                  <label className="field-check" key={r.ruleType}>
                     <input
-                      id="email-dest"
-                      type="email"
-                      value={prefs.EMAIL.destinationRef}
+                      type="checkbox"
+                      checked={r.enabled}
+                      onChange={(e) =>
+                        setRules((prev) =>
+                          prev.map((x) =>
+                            x.ruleType === r.ruleType
+                              ? { ...x, enabled: e.target.checked }
+                              : x,
+                          ),
+                        )
+                      }
+                    />
+                    <span>{r.ruleType.replace(/_/g, " ")}</span>
+                  </label>
+                ))
+              )}
+            </Card>
+          ) : null}
+
+          {activeTab === "notifications" ? (
+            <Card>
+              <CardTitle
+                title="Notifications"
+                subtitle="In-app and email delivery preferences"
+              />
+              {(["IN_APP", "EMAIL"] as PrefChannel[]).map((channel) => (
+                <div key={channel} style={{ marginBottom: 16 }}>
+                  <label className="field-check">
+                    <input
+                      type="checkbox"
+                      checked={prefs[channel].enabled}
                       onChange={(e) =>
                         setPrefs((p) => ({
                           ...p,
-                          EMAIL: {
-                            ...p.EMAIL,
-                            destinationRef: e.target.value,
+                          [channel]: {
+                            ...p[channel],
+                            enabled: e.target.checked,
                           },
                         }))
                       }
-                      placeholder="ops@yourstore.com"
                     />
+                    <span>{channel === "IN_APP" ? "In-app" : "Email"} enabled</span>
+                  </label>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label htmlFor={`sev-${channel}`}>Min severity</label>
+                    <select
+                      id={`sev-${channel}`}
+                      value={prefs[channel].minSeverity}
+                      onChange={(e) =>
+                        setPrefs((p) => ({
+                          ...p,
+                          [channel]: {
+                            ...p[channel],
+                            minSeverity: e.target.value,
+                          },
+                        }))
+                      }
+                    >
+                      {SEVERITIES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                ) : null}
+                  {channel === "EMAIL" ? (
+                    <div className="field" style={{ marginTop: 12 }}>
+                      <label htmlFor="email-dest">Alert email address</label>
+                      <input
+                        id="email-dest"
+                        type="email"
+                        value={prefs.EMAIL.destinationRef}
+                        onChange={(e) =>
+                          setPrefs((p) => ({
+                            ...p,
+                            EMAIL: {
+                              ...p.EMAIL,
+                              destinationRef: e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder="ops@yourstore.com"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              <div className="form-actions">
+                <Button disabled={testBusy} onClick={() => void sendTestEmail()}>
+                  {testBusy ? "Sending…" : "Send test email"}
+                </Button>
               </div>
-            ))}
-            <div className="form-actions">
-              <Button
-                disabled={testBusy}
-                onClick={() => void sendTestEmail()}
-              >
-                {testBusy ? "Sending…" : "Send test email"}
-              </Button>
-            </div>
-          </Card>
+            </Card>
+          ) : null}
 
-          <Card>
-            <CardTitle
-              title="Email templates"
-              subtitle="Override system defaults ({{shopName}}, {{incidentTitle}}, …)"
-            />
-            <div className="field">
-              <label htmlFor="tpl-key">Template</label>
-              <select
-                id="tpl-key"
-                value={activeTplKey}
-                onChange={(e) => selectTemplate(e.target.value)}
-              >
-                {(emailTemplates.length
-                  ? emailTemplates
-                  : [
-                      { key: "INCIDENT_ALERT" },
-                      { key: "REFILL_ALERT" },
-                      { key: "DIGEST" },
-                      { key: "TEST" },
-                    ]
-                ).map((t) => (
-                  <option key={t.key} value={t.key}>
-                    {t.key}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="tpl-subj">Subject</label>
-              <input
-                id="tpl-subj"
-                value={tplSubject}
-                onChange={(e) => setTplSubject(e.target.value)}
+          {activeTab === "email" ? (
+            <Card>
+              <CardTitle
+                title="Email templates"
+                subtitle="Visual editor — uses {{shopName}}, {{incidentTitle}}, and other template vars"
               />
-            </div>
-            <div className="field">
-              <label htmlFor="tpl-html">HTML body</label>
-              <textarea
-                id="tpl-html"
-                rows={8}
-                value={tplHtml}
-                onChange={(e) => setTplHtml(e.target.value)}
+              <div className="field">
+                <label htmlFor="tpl-key">Template</label>
+                <select
+                  id="tpl-key"
+                  value={activeTplKey}
+                  onChange={(e) => selectTemplate(e.target.value)}
+                >
+                  {(emailTemplates.length
+                    ? emailTemplates
+                    : [
+                        { key: "INCIDENT_ALERT" },
+                        { key: "REFILL_ALERT" },
+                        { key: "DIGEST" },
+                        { key: "TEST" },
+                      ]
+                  ).map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.key}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <EmailTemplateEditor
+                templateKey={editorResetKey}
+                subject={tplSubject}
+                htmlBody={tplHtml}
+                textBody={tplText}
+                onSubjectChange={setTplSubject}
+                onCompiledChange={onCompiledChange}
+                onSave={() => void saveTemplate()}
+                onSendTest={() => void sendTestEmail()}
+                saving={saving}
+                testBusy={testBusy}
               />
-            </div>
-            <div className="field">
-              <label htmlFor="tpl-text">Text body</label>
-              <textarea
-                id="tpl-text"
-                rows={5}
-                value={tplText}
-                onChange={(e) => setTplText(e.target.value)}
-              />
-            </div>
-            <div className="form-actions">
-              <Button
-                variant="primary"
-                disabled={saving}
-                onClick={() => void saveTemplate()}
-              >
-                Save template
-              </Button>
-            </div>
-          </Card>
+            </Card>
+          ) : null}
 
-          <Card>
-            <CardTitle
-              title="Billing"
-              subtitle="Current plan and subscription upgrades"
-            />
-            {billing?.requiresPlanSelection ? (
-              <div className="banner" role="status">
+          {activeTab === "ai" ? (
+            <Card>
+              <CardTitle
+                title="AI reports"
+                subtitle="Evidence-based explanations for open incidents"
+              />
+              <div className="facts" style={{ marginBottom: 16 }}>
                 <div>
-                  <strong>Choose a plan to continue</strong>
-                  Your previous Shopify subscription was cancelled when the app
-                  was uninstalled. After reinstalling, Shopify requires you to
-                  select a plan again before paid features are available.
+                  <small>Used this month</small>
+                  <b>
+                    {billing?.usage?.aiReportsUsed != null &&
+                    billing?.usage?.aiReportsLimit != null
+                      ? `${billing.usage.aiReportsUsed} / ${billing.usage.aiReportsLimit}`
+                      : "—"}
+                  </b>
+                </div>
+                <div>
+                  <small>Plan limit</small>
+                  <b>{billing?.usage?.aiReportsLimit ?? "—"}</b>
+                </div>
+                <div>
+                  <small>Prompt version</small>
+                  <b>{String(aiSettings.promptVersion ?? "v1")}</b>
                 </div>
               </div>
-            ) : null}
-            <div className="facts" style={{ marginBottom: 16 }}>
-              <div>
-                <small>Plan</small>
-                <b>
-                  {billing?.entitlements?.displayName ??
-                    billing?.planSlug ??
-                    "—"}
-                </b>
+              <p className="m" style={{ marginBottom: 12 }}>
+                AI reports summarize confirmed evidence already on an incident.
+                They never invent inventory facts or change Shopify quantities.
+                Provider API keys are managed in the StockSentry admin console.
+              </p>
+              <div className="field">
+                <label htmlFor="ai-prompt">Prompt version note</label>
+                <input
+                  id="ai-prompt"
+                  value={String(aiSettings.promptVersion ?? "v1")}
+                  onChange={(e) =>
+                    setAiSettings((prev) => ({
+                      ...prev,
+                      promptVersion: e.target.value,
+                    }))
+                  }
+                />
               </div>
-              <div>
-                <small>Status</small>
-                <b>{billing?.billingStatus ?? "—"}</b>
+            </Card>
+          ) : null}
+
+          {activeTab === "billing" ? (
+            <Card>
+              <CardTitle
+                title="Billing"
+                subtitle="Current plan and subscription upgrades"
+              />
+              {billing?.requiresPlanSelection ? (
+                <div className="banner" role="status">
+                  <div>
+                    <strong>Choose a plan to continue</strong>
+                    Your previous Shopify subscription was cancelled when the app
+                    was uninstalled. After reinstalling, Shopify requires you to
+                    select a plan again before paid features are available.
+                  </div>
+                </div>
+              ) : null}
+              <div className="facts" style={{ marginBottom: 16 }}>
+                <div>
+                  <small>Plan</small>
+                  <b>
+                    {billing?.entitlements?.displayName ??
+                      billing?.planSlug ??
+                      "—"}
+                  </b>
+                </div>
+                <div>
+                  <small>Status</small>
+                  <b>{billing?.billingStatus ?? "—"}</b>
+                </div>
+                <div>
+                  <small>AI reports</small>
+                  <b>
+                    {billing?.usage?.aiReportsUsed != null &&
+                    billing?.usage?.aiReportsLimit != null
+                      ? `${billing.usage.aiReportsUsed} / ${billing.usage.aiReportsLimit}`
+                      : "—"}
+                  </b>
+                </div>
               </div>
-              <div>
-                <small>AI reports</small>
-                <b>
-                  {billing?.usage?.aiReportsUsed != null &&
-                  billing?.usage?.aiReportsLimit != null
-                    ? `${billing.usage.aiReportsUsed} / ${billing.usage.aiReportsLimit}`
-                    : "—"}
-                </b>
-              </div>
-            </div>
-            {billing?.usage ? (
-              <div className="rw">
-                <span>Monitored items</span>
-                <b>
-                  {billing.usage.monitoredItems ?? 0} /{" "}
-                  {billing.usage.maxMonitoredItems ?? "—"}
-                </b>
-              </div>
-            ) : null}
-            {plans.length > 0 ? (
-              <div className="plan-grid">
-                {plans.map((plan) => {
-                  const current = billing?.planSlug === plan.slug;
-                  const paid = plan.priceUsdMonthly > 0;
-                  return (
-                    <div
-                      key={plan.slug}
-                      className={`plan-card${current ? " current" : ""}`}
-                    >
-                      <div>
-                        <b>{plan.displayName}</b>
-                        {current ? (
-                          <span className="chip on" style={{ marginLeft: 8 }}>
-                            Current
-                          </span>
+              {billing?.usage ? (
+                <div className="rw">
+                  <span>Monitored items</span>
+                  <b>
+                    {billing.usage.monitoredItems ?? 0} /{" "}
+                    {billing.usage.maxMonitoredItems ?? "—"}
+                  </b>
+                </div>
+              ) : null}
+              {plans.length > 0 ? (
+                <div className="plan-grid">
+                  {plans.map((plan) => {
+                    const current = billing?.planSlug === plan.slug;
+                    const paid = plan.priceUsdMonthly > 0;
+                    return (
+                      <div
+                        key={plan.slug}
+                        className={`plan-card${current ? " current" : ""}`}
+                      >
+                        <div>
+                          <b>{plan.displayName}</b>
+                          {current ? (
+                            <span className="chip on" style={{ marginLeft: 8 }}>
+                              Current
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="price">
+                          {formatPrice(plan.priceUsdMonthly)}
+                          {paid ? <small> / mo</small> : null}
+                        </div>
+                        {plan.description ? (
+                          <p className="desc">{plan.description}</p>
                         ) : null}
+                        <ul>
+                          {planFeatureBullets(plan).map((b) => (
+                            <li key={b}>{b}</li>
+                          ))}
+                        </ul>
+                        <div className="form-actions">
+                          {paid ? (
+                            <Button
+                              variant={current ? undefined : "primary"}
+                              disabled={subscribeBusy !== null || current}
+                              onClick={() => void subscribe(plan.slug)}
+                            >
+                              {subscribeBusy === plan.slug
+                                ? "Opening…"
+                                : current
+                                  ? "Active"
+                                  : `Subscribe ${plan.displayName}`}
+                            </Button>
+                          ) : (
+                            <Button
+                              disabled={subscribeBusy !== null || current}
+                              onClick={() => void subscribe(plan.slug)}
+                            >
+                              {current ? "On Free" : "Switch to Free"}
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <div className="price">
-                        {formatPrice(plan.priceUsdMonthly)}
-                        {paid ? <small> / mo</small> : null}
-                      </div>
-                      {plan.description ? (
-                        <p className="desc">{plan.description}</p>
-                      ) : null}
-                      <ul>
-                        {planFeatureBullets(plan).map((b) => (
-                          <li key={b}>{b}</li>
-                        ))}
-                      </ul>
-                      <div className="form-actions">
-                        {paid ? (
-                          <Button
-                            variant={current ? undefined : "primary"}
-                            disabled={subscribeBusy !== null || current}
-                            onClick={() => void subscribe(plan.slug)}
-                          >
-                            {subscribeBusy === plan.slug
-                              ? "Opening…"
-                              : current
-                                ? "Active"
-                                : `Subscribe ${plan.displayName}`}
-                          </Button>
-                        ) : (
-                          <Button
-                            disabled={subscribeBusy !== null || current}
-                            onClick={() => void subscribe(plan.slug)}
-                          >
-                            {current ? "On Free" : "Switch to Free"}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="form-actions">
+                  <Button
+                    variant="primary"
+                    disabled={subscribeBusy !== null}
+                    onClick={() => void subscribe("starter")}
+                  >
+                    {subscribeBusy === "starter"
+                      ? "Opening…"
+                      : "Subscribe Starter"}
+                  </Button>
+                  <Button
+                    disabled={subscribeBusy !== null}
+                    onClick={() => void subscribe("pro")}
+                  >
+                    {subscribeBusy === "pro" ? "Opening…" : "Subscribe Pro"}
+                  </Button>
+                </div>
+              )}
+            </Card>
+          ) : null}
+
+          {activeTab === "general" ? (
+            <Card>
+              <CardTitle
+                title="General"
+                subtitle="Shop status and related surfaces"
+              />
+              <div className="facts" style={{ marginBottom: 16 }}>
+                <div>
+                  <small>Shop</small>
+                  <b>{shop || "—"}</b>
+                </div>
+                <div>
+                  <small>Onboarding</small>
+                  <b>{onboardingCompleted ? "Completed" : "In progress"}</b>
+                </div>
+                <div>
+                  <small>Plan</small>
+                  <b>{billing?.planSlug ?? "—"}</b>
+                </div>
               </div>
-            ) : (
               <div className="form-actions">
-                <Button
-                  variant="primary"
-                  disabled={subscribeBusy !== null}
-                  onClick={() => void subscribe("starter")}
-                >
-                  {subscribeBusy === "starter"
-                    ? "Opening…"
-                    : "Subscribe Starter"}
-                </Button>
-                <Button
-                  disabled={subscribeBusy !== null}
-                  onClick={() => void subscribe("pro")}
-                >
-                  {subscribeBusy === "pro" ? "Opening…" : "Subscribe Pro"}
-                </Button>
+                <Link href="/bundles" className="btn">
+                  Bundle Groups
+                </Link>
+                {!onboardingCompleted ? (
+                  <Link href="/onboarding" className="btn p">
+                    Continue onboarding
+                  </Link>
+                ) : null}
               </div>
-            )}
-          </Card>
-        </div>
+            </Card>
+          ) : null}
+        </>
       )}
     </div>
   );

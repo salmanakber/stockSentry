@@ -9,6 +9,10 @@ import {
   getRefillThreshold,
   latestQuantitiesByShop,
 } from "../services/refill.js";
+import {
+  EMPTY_INCIDENT_SUMMARY,
+  incidentSummariesForItems,
+} from "../services/incident-summary.js";
 
 export const bundlesRouter = Router();
 
@@ -46,19 +50,41 @@ bundlesRouter.get("/bundles", requireMerchant, async (req, res, next) => {
       }
     }
 
-    const items = groups.map((g) => ({
-      ...g,
-      items: g.items.map((it) => {
+    const allItemIds = [
+      ...new Set(groups.flatMap((g) => g.items.map((it) => it.inventoryItemId))),
+    ];
+    const summaries = await incidentSummariesForItems(shopId, allItemIds);
+
+    const items = groups.map((g) => {
+      const mappedItems = g.items.map((it) => {
         const qty = minQtyByItem.get(it.inventoryItemId) ?? null;
         const refillAtRisk = qty != null && qty <= threshold;
+        const incidentSummary =
+          summaries.get(it.inventoryItemId) ?? EMPTY_INCIDENT_SUMMARY;
         return {
           ...it,
           quantity: qty,
           refillAtRisk,
           refillThreshold: threshold,
+          inventoryItem: {
+            ...it.inventoryItem,
+            incidentSummary,
+          },
+          incidentSummary,
+          openIncidents: incidentSummary.openCount,
         };
-      }),
-    }));
+      });
+      const openComponentCount = mappedItems.filter(
+        (it) => (it.incidentSummary?.openCount ?? 0) > 0,
+      ).length;
+      return {
+        ...g,
+        items: mappedItems,
+        openComponentCount,
+        hasOpenIncidents: openComponentCount > 0,
+        hasRefillRisk: mappedItems.some((it) => it.refillAtRisk),
+      };
+    });
 
     res.json({ items, refillThreshold: threshold });
   } catch (err) {

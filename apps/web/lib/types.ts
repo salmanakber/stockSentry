@@ -194,12 +194,27 @@ export interface HistoryListResponse extends Partial<PaginatedMeta> {
   items?: HistoryObservation[];
 }
 
+export type ApiIncidentSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type ApiIncidentStatus =
+  | "NEW"
+  | "INVESTIGATING"
+  | "RESOLVED"
+  | "DISMISSED";
+
+export interface IncidentSummary {
+  openCount: number;
+  highestSeverity: ApiIncidentSeverity | null;
+  latestStatus: ApiIncidentStatus | null;
+  latestIncidentId: string | null;
+}
+
 export interface ProductItem {
   id: string;
   productTitle?: string | null;
   variantTitle?: string | null;
   sku?: string | null;
   tracked?: boolean;
+  incidentSummary?: IncidentSummary;
   observations?: Array<{
     quantity?: number;
     observedAt?: string;
@@ -222,6 +237,7 @@ export interface ProductDetailResponse {
     shopifyInventoryItemGid?: string;
     productGid?: string | null;
     variantGid?: string | null;
+    incidentSummary?: IncidentSummary;
   };
   locations?: Array<{
     locationId: string;
@@ -354,11 +370,14 @@ export interface BundleGroupItem {
   quantity?: number | null;
   refillAtRisk?: boolean;
   refillThreshold?: number;
+  openIncidents?: number;
+  incidentSummary?: IncidentSummary;
   inventoryItem?: {
     id?: string;
     productTitle?: string | null;
     variantTitle?: string | null;
     sku?: string | null;
+    incidentSummary?: IncidentSummary;
   };
 }
 
@@ -369,10 +388,14 @@ export interface BundleGroup {
   active?: boolean;
   relationshipSource?: string;
   items?: BundleGroupItem[];
+  openComponentCount?: number;
+  hasOpenIncidents?: boolean;
+  hasRefillRisk?: boolean;
 }
 
 export interface BundlesListResponse {
   items?: BundleGroup[];
+  refillThreshold?: number;
 }
 
 export interface SettingsThresholds {

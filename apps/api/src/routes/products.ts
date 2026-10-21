@@ -10,6 +10,11 @@ import {
   getRefillThreshold,
   refillSuggestionText,
 } from "../services/refill.js";
+import {
+  EMPTY_INCIDENT_SUMMARY,
+  incidentSummariesForItems,
+  summarizeFromRows,
+} from "../services/incident-summary.js";
 
 export const productsRouter = Router();
 
@@ -55,8 +60,16 @@ productsRouter.get("/products", requireMerchant, async (req, res, next) => {
       }),
     ]);
 
+    const summaries = await incidentSummariesForItems(
+      shopId,
+      items.map((i) => i.id),
+    );
+
     res.json({
-      items,
+      items: items.map((item) => ({
+        ...item,
+        incidentSummary: summaries.get(item.id) ?? EMPTY_INCIDENT_SUMMARY,
+      })),
       locations,
       page,
       pageSize,
@@ -250,6 +263,14 @@ productsRouter.get("/products/:id", requireMerchant, async (req, res, next) => {
       return Math.min(acc, l.quantity);
     }, null);
 
+    const incidentSummary = summarizeFromRows(
+      openIncidents.map((i) => ({
+        id: i.id,
+        severity: i.severity,
+        status: i.status,
+      })),
+    );
+
     res.json({
       item: {
         id: item.id,
@@ -262,6 +283,7 @@ productsRouter.get("/products/:id", requireMerchant, async (req, res, next) => {
         variantGid: item.variantGid,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
+        incidentSummary,
       },
       locations: locationQuantities,
       history: {
