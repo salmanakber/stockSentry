@@ -32,6 +32,7 @@ export default function IncidentsPage() {
   const { shop } = useShop();
   const searchParams = useSearchParams();
   const demo = searchParams.get("demo") === "1";
+  const productId = searchParams.get("productId")?.trim() || "";
   const { setBadges, ready } = useShell();
   const { showToast } = useToast();
   const [items, setItems] = useState<IncidentRow[]>([]);
@@ -58,9 +59,13 @@ export default function IncidentsPage() {
       return;
     }
     try {
-      const res = await apiRequest<IncidentsApiResponse>("/api/v1/incidents", {
-        shop,
-      });
+      const params = new URLSearchParams();
+      if (productId) params.set("productId", productId);
+      const qs = params.toString();
+      const res = await apiRequest<IncidentsApiResponse>(
+        `/api/v1/incidents${qs ? `?${qs}` : ""}`,
+        { shop },
+      );
       const mapped = (res?.items ?? []).map(mapApiIncidentRow);
       setItems(mapped);
       if (res?.badges) setBadges(res.badges);
@@ -76,7 +81,7 @@ export default function IncidentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [demo, shop, setBadges]);
+  }, [demo, productId, shop, setBadges]);
 
   useEffect(() => {
     void load();

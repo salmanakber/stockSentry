@@ -15,12 +15,15 @@ incidentsRouter.get("/incidents", requireMerchant, async (req, res, next) => {
     const status = req.query.status as IncidentStatus | undefined;
     const severity = req.query.severity as IncidentSeverity | undefined;
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const productId =
+      typeof req.query.productId === "string" ? req.query.productId.trim() : "";
     const page = Math.max(1, Number(req.query.page) || 1);
 
     const where = {
       shopId,
       ...(status ? { status } : {}),
       ...(severity ? { severity } : {}),
+      ...(productId ? { inventoryItemId: productId } : {}),
       ...(q
         ? {
             OR: [
