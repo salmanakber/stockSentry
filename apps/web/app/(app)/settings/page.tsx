@@ -421,7 +421,10 @@ export default function SettingsPage() {
               <p className="m" style={{ marginBottom: 12 }}>
                 When observed quantity at a location is at or below the refill
                 threshold, StockSentry opens a refill suggestion (alert only — never
-                writes inventory to Shopify).
+                writes inventory to Shopify). Optionally, under Catalog →
+                Replenishment you can add supplier rules that email a verified
+                supplier when stock is low — always merchant-controlled, never
+                automatic inventory writes.
               </p>
               <div className="field-row">
                 <div className="field">
@@ -629,6 +632,7 @@ export default function SettingsPage() {
                         { key: "REFILL_ALERT" },
                         { key: "DIGEST" },
                         { key: "TEST" },
+                        { key: "SUPPLIER_REPLENISH" },
                       ]
                   ).map((t) => (
                     <option key={t.key} value={t.key}>

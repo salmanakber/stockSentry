@@ -22,6 +22,8 @@ export async function handleShopRedact(shopDomain: string): Promise<void> {
     prisma.aiReport.deleteMany({ where: { shopId: shop.id } }),
     prisma.productReport.deleteMany({ where: { shopId: shop.id } }),
     prisma.incident.deleteMany({ where: { shopId: shop.id } }),
+    prisma.replenishmentRequest.deleteMany({ where: { shopId: shop.id } }),
+    prisma.supplierReplenishmentRule.deleteMany({ where: { shopId: shop.id } }),
     prisma.supplierItem.deleteMany({ where: { shopId: shop.id } }),
     prisma.supplier.deleteMany({ where: { shopId: shop.id } }),
     prisma.bundleGroupItem.deleteMany({ where: { shopId: shop.id } }),

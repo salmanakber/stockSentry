@@ -120,6 +120,24 @@ export default function SupplierDetailPage() {
     }
   };
 
+  const markVerified = async () => {
+    if (busy || data?.verified) return;
+    setBusy(true);
+    try {
+      await apiRequest(`/api/v1/suppliers/${encodeURIComponent(id)}/verify`, {
+        method: "PATCH",
+        shop,
+        body: JSON.stringify({ verified: true }),
+      });
+      showToast("Supplier marked as verified");
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Verify failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const attachProducts = async (products: ProductItem[]) => {
     if (busy) return;
     setBusy(true);
@@ -168,11 +186,16 @@ export default function SupplierDetailPage() {
     <div className="pg">
       <PageHeader
         title={data?.name ?? "Supplier"}
-        subtitle="Edit details and attach products"
+        subtitle="Edit details, verify contact, and attach products"
         actions={
-          <Link href="/suppliers" className="btn">
-            All suppliers
-          </Link>
+          <>
+            <Link href="/replenishment" className="btn">
+              Replenishment
+            </Link>
+            <Link href="/suppliers" className="btn">
+              All suppliers
+            </Link>
+          </>
         }
       />
 
@@ -202,6 +225,20 @@ export default function SupplierDetailPage() {
           <div className="col2">
             <Card>
               <CardTitle title="Details" subtitle="Contact and lead time" />
+              <div className="chip-row" style={{ marginBottom: 12 }}>
+                {data.verified ? (
+                  <span className="chip on">Verified</span>
+                ) : (
+                  <span className="chip">Unverified</span>
+                )}
+              </div>
+              {!data.verified ? (
+                <p className="m" style={{ marginTop: 0 }}>
+                  Mark as verified only after you confirm this supplier email is
+                  correct. Verification is required before auto replenishment
+                  emails can send.
+                </p>
+              ) : null}
               <div className="field">
                 <label htmlFor="name">Name</label>
                 <input
@@ -252,6 +289,11 @@ export default function SupplierDetailPage() {
                 >
                   {saving ? "Saving…" : "Save"}
                 </Button>
+                {!data.verified ? (
+                  <Button disabled={busy} onClick={() => void markVerified()}>
+                    Mark as verified
+                  </Button>
+                ) : null}
                 <Button disabled={busy} onClick={() => void remove()}>
                   Delete
                 </Button>

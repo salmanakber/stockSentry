@@ -93,6 +93,8 @@ model Shop {
   shopSettings            ShopSettings?
   suppliers               Supplier[]
   supplierItems           SupplierItem[]
+  supplierReplenishmentRules SupplierReplenishmentRule[]
+  replenishmentRequests   ReplenishmentRequest[]
   productReports          ProductReport[]
   emailTemplates          EmailTemplate[]
 
@@ -171,12 +173,14 @@ model InventoryItem {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  shop           Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  observations   InventoryObservation[]
-  incidents      Incident[]
-  bundleItems    BundleGroupItem[]
-  supplierItems  SupplierItem[]
-  productReports ProductReport[]
+  shop                   Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  observations           InventoryObservation[]
+  incidents              Incident[]
+  bundleItems            BundleGroupItem[]
+  supplierItems          SupplierItem[]
+  replenishmentRules     SupplierReplenishmentRule[]
+  replenishmentRequests  ReplenishmentRequest[]
+  productReports         ProductReport[]
 
   @@unique([shopId, shopifyInventoryItemGid])
   @@index([shopId, productGid])
@@ -410,8 +414,10 @@ model BundleGroup {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  shop  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  items BundleGroupItem[]
+  shop                   Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items                  BundleGroupItem[]
+  replenishmentRules     SupplierReplenishmentRule[]
+  replenishmentRequests  ReplenishmentRequest[]
 
   @@index([shopId, active])
 }
@@ -584,22 +590,27 @@ model ShopSettings {
 // ---------------------------------------------------------------------------
 
 model Supplier {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   shopId        String
   name          String
   contactEmail  String?
   contactName   String?
   notes         String?
   leadTimeDays  Int?
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  active        Boolean   @default(true)
+  verified      Boolean   @default(false)
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  shop  Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  items SupplierItem[]
+  shop                 Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items                SupplierItem[]
+  replenishmentRules   SupplierReplenishmentRule[]
+  replenishmentRequests ReplenishmentRequest[]
 
   @@index([shopId, active])
   @@index([shopId, name])
+  @@index([shopId, verified])
 }
 
 model SupplierItem {
@@ -618,6 +629,70 @@ model SupplierItem {
 
   @@unique([supplierId, inventoryItemId])
   @@index([shopId, inventoryItemId])
+  @@index([shopId, supplierId])
+}
+
+model SupplierReplenishmentRule {
+  id                 String    @id @default(cuid())
+  shopId             String
+  inventoryItemId    String?
+  bundleGroupId      String?
+  supplierId         String
+  lowStockThreshold  Int
+  restockQuantity    Int
+  autoEmailEnabled   Boolean   @default(false)
+  requireApproval    Boolean   @default(true)
+  active             Boolean   @default(true)
+  lastTriggeredAt    DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  shop          Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  supplier      Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  bundleGroup   BundleGroup? @relation(fields: [bundleGroupId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, active])
+  @@index([shopId, supplierId])
+  @@index([shopId, inventoryItemId])
+  @@index([shopId, bundleGroupId])
+}
+
+enum ReplenishmentRequestStatus {
+  DRAFT
+  PENDING_APPROVAL
+  QUEUED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model ReplenishmentRequest {
+  id              String                      @id @default(cuid())
+  shopId          String
+  supplierId      String
+  inventoryItemId String?
+  bundleGroupId   String?
+  status          ReplenishmentRequestStatus  @default(DRAFT)
+  quantity        Int
+  threshold       Int
+  supplierEmail   String?
+  subject         String?
+  bodyPreview     String?
+  dedupeKey       String
+  sentAt          DateTime?
+  approvedAt      DateTime?
+  errorCode       String?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  bundleGroup   BundleGroup?  @relation(fields: [bundleGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, dedupeKey])
+  @@index([shopId, status, createdAt])
   @@index([shopId, supplierId])
 }
 
@@ -656,6 +731,7 @@ enum EmailTemplateKey {
   REFILL_ALERT
   DIGEST
   TEST
+  SUPPLIER_REPLENISH
 }
 
 model EmailTemplate {

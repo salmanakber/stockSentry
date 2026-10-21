@@ -11,6 +11,7 @@ import { exportsRouter } from "./exports.js";
 import { onboardingRouter } from "./onboarding.js";
 import { billingRouter } from "./billing.js";
 import { suppliersRouter } from "./suppliers.js";
+import { replenishmentRouter } from "./replenishment.js";
 
 /**
  * Authenticated REST surface. OAuth lives at /auth on the main app;
@@ -25,6 +26,7 @@ apiRouter.use("/v1", incidentsRouter);
 apiRouter.use("/v1", historyRouter);
 apiRouter.use("/v1", productsRouter);
 apiRouter.use("/v1", suppliersRouter);
+apiRouter.use("/v1", replenishmentRouter);
 apiRouter.use("/v1", bundlesRouter);
 apiRouter.use("/v1", settingsRouter);
 apiRouter.use("/v1", notificationsRouter);
@@ -47,6 +49,8 @@ apiRouter.get("/", (_req, res) => {
       productReport: "/api/v1/products/:id/report",
       sync: "/api/v1/sync",
       suppliers: "/api/v1/suppliers",
+      replenishmentRules: "/api/v1/replenishment/rules",
+      replenishmentRequests: "/api/v1/replenishment/requests",
       bundles: "/api/v1/bundles",
       settings: "/api/v1/settings",
       emailTemplates: "/api/v1/settings/email-templates",

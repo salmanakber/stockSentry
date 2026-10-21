@@ -23,6 +23,7 @@ import {
 } from "./notify.js";
 import { enqueue, QUEUE_NAMES } from "../queues/index.js";
 import { getRefillThreshold } from "./refill.js";
+import { evaluateReplenishmentForObservation } from "./replenishment.js";
 
 async function enqueuePendingDelivery(
   delivery: { id: string; status: string } | null,
@@ -721,6 +722,18 @@ export async function evaluateObservation(
     }
     if (result) touched.push(result);
   }
+
+  // Optional supplier replenishment (email / approval) — never writes Shopify qty
+  await evaluateReplenishmentForObservation({
+    shopId: ctx.shopId,
+    inventoryItemId: ctx.inventoryItemId,
+    quantity: ctx.quantity,
+  }).catch((err) => {
+    console.warn(
+      "[detection] replenishment evaluation failed",
+      err instanceof Error ? err.message : err,
+    );
+  });
 
   return touched;
 }

@@ -50,6 +50,7 @@ const NAV: {
       { icon: "pr", label: "Inventory", href: "/products" },
       { icon: "bu", label: "Bundle Groups", href: "/bundles" },
       { icon: "db", label: "Suppliers", href: "/suppliers" },
+      { icon: "ex", label: "Replenishment", href: "/replenishment" },
     ],
   },
   {

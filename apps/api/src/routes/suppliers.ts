@@ -60,6 +60,8 @@ suppliersRouter.get("/suppliers", requireMerchant, async (req, res, next) => {
           notes: s.notes,
           leadTimeDays: s.leadTimeDays,
           active: s.active,
+          verified: s.verified,
+          verifiedAt: s.verifiedAt,
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
           itemCount: s._count.items,
@@ -194,7 +196,17 @@ suppliersRouter.patch(
         notes?: string | null;
         leadTimeDays?: number | null;
         active?: boolean;
+        verified?: boolean;
       };
+
+      // Verification is only via POST /suppliers/:id/verify
+      if (body.verified !== undefined) {
+        res.status(400).json({
+          error: "use_verify_endpoint",
+          message: "Use POST /suppliers/:id/verify to mark a supplier verified.",
+        });
+        return;
+      }
 
       const supplier = await prisma.supplier.update({
         where: { id: existing.id },
@@ -213,6 +225,84 @@ suppliersRouter.patch(
             ? { leadTimeDays: body.leadTimeDays }
             : {}),
           ...(body.active !== undefined ? { active: body.active } : {}),
+        },
+      });
+
+      res.json(supplier);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Explicit merchant action — only accepts `{ verified: true }`. */
+suppliersRouter.post(
+  "/suppliers/:id/verify",
+  requireMerchant,
+  async (req, res, next) => {
+    try {
+      const shopId = req.shopId!;
+      const existing = await prisma.supplier.findFirst({
+        where: { id: req.params.id, shopId },
+      });
+      if (!existing) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+
+      const body = req.body as { verified?: boolean };
+      if (body.verified !== true) {
+        res.status(400).json({
+          error: "verified_true_required",
+          message: "Only { verified: true } is accepted via this action.",
+        });
+        return;
+      }
+
+      const supplier = await prisma.supplier.update({
+        where: { id: existing.id },
+        data: {
+          verified: true,
+          verifiedAt: existing.verifiedAt ?? new Date(),
+        },
+      });
+
+      res.json(supplier);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Alias matching the PATCH verify contract: `{ verified: true }` only. */
+suppliersRouter.patch(
+  "/suppliers/:id/verify",
+  requireMerchant,
+  async (req, res, next) => {
+    try {
+      const shopId = req.shopId!;
+      const existing = await prisma.supplier.findFirst({
+        where: { id: req.params.id, shopId },
+      });
+      if (!existing) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+
+      const body = req.body as { verified?: boolean };
+      if (body.verified !== true) {
+        res.status(400).json({
+          error: "verified_true_required",
+          message: "Only { verified: true } is accepted via this action.",
+        });
+        return;
+      }
+
+      const supplier = await prisma.supplier.update({
+        where: { id: existing.id },
+        data: {
+          verified: true,
+          verifiedAt: existing.verifiedAt ?? new Date(),
         },
       });
 

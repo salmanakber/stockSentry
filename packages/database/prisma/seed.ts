@@ -235,6 +235,51 @@ Product: {{productUrl}}`,
 ${DISCLAIMER_FOOTER}`,
   },
   {
+    key: "SUPPLIER_REPLENISH" as const,
+    subject:
+      "[StockSentry] Replenishment request — {{productTitle}} (qty {{restockQuantity}})",
+    htmlBody: `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f4f6f5;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f5;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #dce5e1;">
+<tr><td style="background:#008060;padding:20px 28px;">
+  <div style="color:#ffffff;font-size:18px;font-weight:700;">StockSentry</div>
+  <div style="color:#d4f5eb;font-size:13px;margin-top:4px;">Supplier replenishment</div>
+</td></tr>
+<tr><td style="padding:28px;">
+  <p style="margin:0 0 12px;color:#1a1a1a;font-size:16px;font-weight:600;">Please restock {{productTitle}}</p>
+  <p style="margin:0 0 8px;color:#44554d;font-size:14px;"><strong>Shop:</strong> {{shopName}}</p>
+  <p style="margin:0 0 8px;color:#44554d;font-size:14px;"><strong>Supplier:</strong> {{supplierName}}</p>
+  <p style="margin:0 0 8px;color:#44554d;font-size:14px;"><strong>SKU / product:</strong> {{productTitle}}</p>
+  <p style="margin:0 0 8px;color:#44554d;font-size:14px;"><strong>Observed quantity:</strong> {{currentQuantity}}</p>
+  <p style="margin:0 0 8px;color:#44554d;font-size:14px;"><strong>Low-stock threshold:</strong> {{threshold}}</p>
+  <p style="margin:0 0 16px;color:#44554d;font-size:14px;"><strong>Requested restock qty:</strong> {{restockQuantity}}</p>
+  <p style="margin:0 0 16px;color:#44554d;font-size:14px;">{{summary}}</p>
+  <p style="margin:0 0 20px;color:#6b7c74;font-size:13px;line-height:1.45;">This message was sent by the merchant via StockSentry. StockSentry is read-only and does not change Shopify inventory.</p>
+  <a href="{{requestUrl}}" style="display:inline-block;background:#008060;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-size:14px;font-weight:600;">View in StockSentry</a>
+</td></tr>
+<tr><td style="padding:16px 28px;background:#f7faf8;color:#6b7c74;font-size:12px;line-height:1.45;">{{disclaimer}} ${DISCLAIMER_FOOTER}</td></tr>
+</table>
+</td></tr></table>
+</body></html>`,
+    textBody: `StockSentry — supplier replenishment request
+
+Shop: {{shopName}}
+Supplier: {{supplierName}}
+Product: {{productTitle}}
+Observed quantity: {{currentQuantity}}
+Threshold: {{threshold}}
+Requested restock qty: {{restockQuantity}}
+
+{{summary}}
+
+StockSentry is read-only and does not change Shopify inventory.
+{{disclaimer}}
+
+View: {{requestUrl}}`,
+  },
+  {
     key: "TEST" as const,
     subject: "[StockSentry] Test email for {{shopName}}",
     htmlBody: `<!DOCTYPE html>

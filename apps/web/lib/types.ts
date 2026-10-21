@@ -335,8 +335,55 @@ export interface SupplierListItem {
   notes?: string | null;
   leadTimeDays?: number | null;
   active?: boolean;
+  verified?: boolean;
+  verifiedAt?: string | null;
   itemCount?: number;
   openIncidentCount?: number;
+}
+
+export interface ReplenishmentRule {
+  id: string;
+  shopId?: string;
+  inventoryItemId?: string | null;
+  bundleGroupId?: string | null;
+  supplierId: string;
+  lowStockThreshold: number;
+  restockQuantity: number;
+  autoEmailEnabled?: boolean;
+  requireApproval?: boolean;
+  active?: boolean;
+  lastTriggeredAt?: string | null;
+  supplier?: {
+    id: string;
+    name: string;
+    contactEmail?: string | null;
+    verified?: boolean;
+  };
+  inventoryItem?: ProductItem | null;
+  bundleGroup?: { id: string; name: string } | null;
+}
+
+export interface ReplenishmentRequest {
+  id: string;
+  status: string;
+  quantity: number;
+  threshold: number;
+  supplierEmail?: string | null;
+  subject?: string | null;
+  bodyPreview?: string | null;
+  dedupeKey?: string;
+  sentAt?: string | null;
+  approvedAt?: string | null;
+  errorCode?: string | null;
+  createdAt?: string;
+  supplier?: {
+    id: string;
+    name: string;
+    contactEmail?: string | null;
+    verified?: boolean;
+  };
+  inventoryItem?: ProductItem | null;
+  bundleGroup?: { id: string; name: string } | null;
 }
 
 export interface SuppliersListResponse {

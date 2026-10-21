@@ -16,6 +16,7 @@ const EMAIL_KEYS: EmailTemplateKey[] = [
   "REFILL_ALERT",
   "DIGEST",
   "TEST",
+  "SUPPLIER_REPLENISH",
 ];
 
 settingsRouter.get("/settings", requireMerchant, async (req, res, next) => {

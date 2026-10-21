@@ -74,7 +74,12 @@ export default function SuppliersPage() {
     <div className="pg">
       <PageHeader
         title="Suppliers"
-        subtitle="Link suppliers to inventory items for risk context."
+        subtitle="Link suppliers to inventory items for risk context. Verify contacts before optional replenishment emails."
+        actions={
+          <Link href="/replenishment" className="btn">
+            Replenishment
+          </Link>
+        }
       />
 
       <div className="split">
@@ -140,6 +145,13 @@ export default function SuppliersPage() {
                   <div className="m">
                     {s.contactEmail ?? "No email"}
                     {s.active === false ? " · inactive" : ""}
+                  </div>
+                  <div className="chip-row" style={{ marginTop: 4 }}>
+                    {s.verified ? (
+                      <span className="chip on">Verified</span>
+                    ) : (
+                      <span className="chip">Unverified</span>
+                    )}
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>

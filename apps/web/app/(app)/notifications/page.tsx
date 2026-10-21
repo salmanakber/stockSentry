@@ -31,6 +31,12 @@ function formatWhen(iso?: string | null): string {
 }
 
 function deliveryTitle(d: NotificationDelivery): string {
+  if (
+    typeof d.destination === "string" &&
+    d.destination.startsWith("replenishment:")
+  ) {
+    return "Supplier replenishment approval";
+  }
   const item = d.incident?.inventoryItem;
   if (item?.productTitle) {
     return item.variantTitle && item.variantTitle !== "Default Title"
@@ -38,6 +44,19 @@ function deliveryTitle(d: NotificationDelivery): string {
       : item.productTitle;
   }
   return d.incident?.type ?? "Notification";
+}
+
+function deliveryHref(d: NotificationDelivery): string | null {
+  if (d.incident?.id) {
+    return `/incidents/${encodeURIComponent(d.incident.id)}`;
+  }
+  if (
+    typeof d.destination === "string" &&
+    d.destination.startsWith("replenishment:")
+  ) {
+    return "/replenishment";
+  }
+  return null;
 }
 
 function isUnread(d: NotificationDelivery): boolean {
@@ -157,9 +176,9 @@ export default function NotificationsPage() {
             <div className="list-row" key={d.id}>
               <div>
                 <b>
-                  {d.incident?.id ? (
+                  {deliveryHref(d) ? (
                     <Link
-                      href={`/incidents/${encodeURIComponent(d.incident.id)}`}
+                      href={deliveryHref(d)!}
                       style={{ color: "inherit", textDecoration: "none" }}
                     >
                       {deliveryTitle(d)}
