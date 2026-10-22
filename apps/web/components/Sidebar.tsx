@@ -155,13 +155,14 @@ export function Sidebar({
       </button>
       <div className="br">
         <div className="mk">
-          <svg viewBox="0 0 24 24">
-            <path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z" />
-            <path d="m9 12 2 2 4-4" />
-          </svg>
+          <img src="/images/logo-icon.png" alt="" />
         </div>
         <div className="lb">
-          <b>StockSentry</b>
+          <img
+            src="/images/logo.png"
+            alt="StockSentry"
+            className="brand-logo"
+          />
           <small>Inventory monitoring</small>
         </div>
       </div>

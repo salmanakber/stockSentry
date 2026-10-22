@@ -11,9 +11,34 @@ export type MonitoringHealthInput = {
   installationStatus: string;
   lastWebhookAt: Date | null;
   lastReconciledAt: Date | null;
+  /** Interval in hours (fractional OK when derived from minutes). */
   reconciliationIntervalHours: number;
+  /** Preferred when set — converted to hours for freshness checks. */
+  reconciliationIntervalMinutes?: number | null;
   now?: Date;
 };
+
+/** Resolve verification cadence in minutes, preferring minutes field. */
+export function resolveReconciliationIntervalMinutes(input: {
+  reconciliationIntervalMinutes?: number | null;
+  reconciliationIntervalHours?: number | null;
+}): number {
+  if (
+    typeof input.reconciliationIntervalMinutes === "number" &&
+    input.reconciliationIntervalMinutes > 0
+  ) {
+    return Math.max(1, Math.round(input.reconciliationIntervalMinutes));
+  }
+  const hours = input.reconciliationIntervalHours ?? 6;
+  return Math.max(1, Math.round(hours * 60));
+}
+
+export function resolveReconciliationIntervalHours(input: {
+  reconciliationIntervalMinutes?: number | null;
+  reconciliationIntervalHours?: number | null;
+}): number {
+  return resolveReconciliationIntervalMinutes(input) / 60;
+}
 
 function hoursSince(date: Date | null, now: Date): number | null {
   if (!date) return null;
@@ -38,7 +63,13 @@ export function deriveMonitoringHealth(
 
   const reconHours = hoursSince(input.lastReconciledAt, now);
   const webhookHours = hoursSince(input.lastWebhookAt, now);
-  const interval = Math.max(1, input.reconciliationIntervalHours);
+  const interval = Math.max(
+    1 / 60,
+    resolveReconciliationIntervalHours({
+      reconciliationIntervalMinutes: input.reconciliationIntervalMinutes,
+      reconciliationIntervalHours: input.reconciliationIntervalHours,
+    }),
+  );
 
   if (reconHours === null) {
     return "degraded";

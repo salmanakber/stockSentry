@@ -71,6 +71,8 @@ model Shop {
   lastWebhookAt               DateTime?
   lastReconciledAt            DateTime?
   reconciliationIntervalHours Int                @default(6)
+  /// Preferred cadence in minutes (1–1440). Hours kept for legacy readers.
+  reconciliationIntervalMinutes Int              @default(360)
   aiReportsUsedMonth          Int                @default(0)
   aiReportsMonthKey           String?
   createdAt                   DateTime           @default(now())
@@ -173,6 +175,7 @@ model InventoryItem {
   productTitle             String?
   variantTitle             String?
   sku                      String?
+  imageUrl                 String?
   tracked                  Boolean   @default(true)
   deletedAt                DateTime?
   createdAt                DateTime  @default(now())

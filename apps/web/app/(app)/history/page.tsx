@@ -4,22 +4,42 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/Button";
 import { Card } from "../../../components/Card";
 import { Icon } from "../../../components/IconSprite";
+import { PlanLockBadge } from "../../../components/PlanLockBadge";
 import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { PageHeader } from "../../../components/shared/PageHeader";
 import { apiRequest, downloadAuthenticated } from "../../../lib/api";
-import type { HistoryListResponse, HistoryObservation } from "../../../lib/types";
+import type {
+  BillingStatusResponse,
+  HistoryListResponse,
+  HistoryObservation,
+} from "../../../lib/types";
 import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
 
 const SOURCES = [
   { value: "", label: "All sources" },
-  { value: "BASELINE", label: "Baseline" },
-  { value: "WEBHOOK", label: "Webhook" },
-  { value: "API_READ", label: "API read" },
-  { value: "RECONCILIATION", label: "Inventory verification" },
+  { value: "BASELINE", label: "Initial snapshot" },
+  { value: "WEBHOOK", label: "Live store update" },
+  { value: "API_READ", label: "Manual refresh" },
+  { value: "RECONCILIATION", label: "Scheduled verification" },
 ];
+
+const SOURCE_LABELS: Record<string, string> = {
+  BASELINE: "Initial snapshot",
+  WEBHOOK: "Live store update",
+  API_READ: "Manual refresh",
+  RECONCILIATION: "Scheduled verification",
+};
+
+const QUALITY_LABELS: Record<string, string> = {
+  COMPLETE: "Complete",
+  PARTIAL: "Partial",
+  STALE: "Needs refresh",
+  UNKNOWN_BASELINE: "First reading",
+  DEGRADED: "Degraded",
+};
 
 function formatWhen(iso: string): string {
   try {
@@ -44,6 +64,23 @@ function productLabel(row: HistoryObservation): string {
   return base;
 }
 
+function initials(row: HistoryObservation): string {
+  const title = row.inventoryItem?.productTitle?.trim() || "?";
+  const parts = title.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
+  }
+  return title.slice(0, 2).toUpperCase();
+}
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
+}
+
+function qualityLabel(q: string): string {
+  return QUALITY_LABELS[q] ?? q;
+}
+
 export default function HistoryPage() {
   const { shop } = useShop();
   const { ready } = useShell();
@@ -55,19 +92,27 @@ export default function HistoryPage() {
   const [source, setSource] = useState("");
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportsEnabled, setExportsEnabled] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page) });
       if (source) params.set("source", source);
-      const res = await apiRequest<HistoryListResponse>(
-        `/api/v1/history?${params}`,
-        { shop },
-      );
+      const [res, bill] = await Promise.all([
+        apiRequest<HistoryListResponse>(`/api/v1/history?${params}`, {
+          shop,
+        }),
+        apiRequest<BillingStatusResponse>("/api/v1/billing/status", {
+          shop,
+        }).catch(() => null),
+      ]);
       setItems(res?.items ?? []);
       setTotalPages(Math.max(1, res?.totalPages ?? 1));
       setTotal(res?.total ?? 0);
+      if (bill?.entitlements?.exportsEnabled != null) {
+        setExportsEnabled(Boolean(bill.entitlements.exportsEnabled));
+      }
     } catch {
       setItems([]);
       setTotalPages(1);
@@ -84,7 +129,7 @@ export default function HistoryPage() {
   useReveal(ready && !loading, null, [items, ready, loading]);
 
   const onExport = async () => {
-    if (exporting) return;
+    if (exporting || !exportsEnabled) return;
     setExporting(true);
     try {
       await downloadAuthenticated(
@@ -101,19 +146,25 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="pg">
+    <div className="pg hist-page">
       <PageHeader
         title="Inventory History"
-        subtitle="Observed quantity changes across products and locations."
+        subtitle="A timeline of quantity readings across products and locations."
         actions={
-          <Button onClick={() => void onExport()} disabled={exporting}>
-            <Icon id="ex" />
-            {exporting ? "Exporting…" : "Export CSV"}
-          </Button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {!exportsEnabled ? <PlanLockBadge /> : null}
+            <Button
+              onClick={() => void onExport()}
+              disabled={exporting || !exportsEnabled}
+            >
+              <Icon id="ex" />
+              {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+          </div>
         }
       />
       <Card loading={loading}>
-        <div className="filters">
+        <div className="hist-filters filters">
           <select
             value={source}
             onChange={(e) => {
@@ -134,7 +185,7 @@ export default function HistoryPage() {
           <EmptyState
             icon="hi"
             title="No history yet"
-            description="Inventory observations from webhooks and scheduled verification will appear here once monitoring is active."
+            description="Quantity readings from live store updates and scheduled verification will appear here once monitoring is active."
           />
         ) : (
           <>
@@ -142,39 +193,73 @@ export default function HistoryPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Time</th>
                     <th>Product</th>
                     <th>Location</th>
                     <th>Qty</th>
                     <th>Source</th>
-                    <th>Data quality</th>
+                    <th>Quality</th>
+                    <th>Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((row) => (
-                    <tr key={row.id}>
-                      <td className="mono">{formatWhen(row.observedAt)}</td>
-                      <td>
-                        <b>{productLabel(row)}</b>
-                        {row.inventoryItem?.sku ? (
-                          <div className="m mono">SKU {row.inventoryItem.sku}</div>
-                        ) : null}
-                      </td>
-                      <td>{row.location?.name ?? "—"}</td>
-                      <td className="q">{row.quantity}</td>
-                      <td>
-                        <span className="ch">{row.source}</span>
-                      </td>
-                      <td>{row.dataQuality}</td>
-                    </tr>
-                  ))}
+                  {items.map((row) => {
+                    const delta = row.quantityDelta;
+                    return (
+                      <tr key={row.id}>
+                        <td>
+                          <div className="hist-prod">
+                            <div className="hist-thumb">
+                              {row.inventoryItem?.imageUrl ? (
+                                <img
+                                  src={row.inventoryItem.imageUrl}
+                                  alt=""
+                                />
+                              ) : (
+                                initials(row)
+                              )}
+                            </div>
+                            <div className="hist-prod-meta">
+                              <b>{productLabel(row)}</b>
+                              {row.inventoryItem?.sku ? (
+                                <div className="sku mono">
+                                  SKU {row.inventoryItem.sku}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+                        <td>{row.location?.name ?? "—"}</td>
+                        <td>
+                          <span className="hist-qty">{row.quantity}</span>
+                          {delta != null && delta !== 0 ? (
+                            <span
+                              className={`hist-delta ${delta > 0 ? "up" : "down"}`}
+                            >
+                              {delta > 0 ? `+${delta}` : delta}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td>
+                          <span className="hist-chip src">
+                            {sourceLabel(row.source)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="hist-chip">
+                            {qualityLabel(row.dataQuality)}
+                          </span>
+                        </td>
+                        <td className="mono">{formatWhen(row.observedAt)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             <div className="pager">
               <span>
                 Page {page} of {totalPages}
-                {total ? ` · ${total.toLocaleString()} observations` : ""}
+                {total ? ` · ${total.toLocaleString()} readings` : ""}
               </span>
               <div className="btns">
                 <Button

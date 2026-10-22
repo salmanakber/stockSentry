@@ -181,11 +181,14 @@ export interface HistoryObservation {
   quantity: number;
   quantityName?: string;
   dataQuality: string;
+  previousQuantity?: number | null;
+  quantityDelta?: number | null;
   inventoryItem?: {
     id?: string;
     productTitle?: string | null;
     variantTitle?: string | null;
     sku?: string | null;
+    imageUrl?: string | null;
   };
   location?: { id?: string; name?: string };
 }
@@ -459,6 +462,7 @@ export interface SettingsThresholds {
   repeatedChangeWindowMinutes?: number;
   duplicateSuppressionMinutes?: number;
   reconciliationIntervalHours?: number;
+  reconciliationIntervalMinutes?: number;
 }
 
 export interface DetectionRuleRow {
@@ -481,6 +485,7 @@ export interface SettingsResponse {
   shop?: {
     planSlug?: string;
     reconciliationIntervalHours?: number;
+    reconciliationIntervalMinutes?: number;
     onboardingCompleted?: boolean;
   };
   settings?: {
@@ -523,6 +528,11 @@ export interface BillingStatusResponse {
     priceUsdMonthly?: number;
     exportsEnabled?: boolean;
     aiReportsPerMonth?: number;
+    advancedRules?: boolean;
+    supplierAutomation?: boolean;
+    maxBundleGroups?: number;
+    maxSuppliers?: number;
+    teamWorkflows?: boolean;
   };
   usage?: {
     monitoredItems?: number;
@@ -531,6 +541,8 @@ export interface BillingStatusResponse {
     maxOpenIncidents?: number;
     aiReportsUsed?: number;
     aiReportsLimit?: number;
+    bundleGroups?: number;
+    suppliers?: number;
   };
 }
 

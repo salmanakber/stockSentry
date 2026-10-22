@@ -24,6 +24,9 @@ const INVENTORY_LEVELS_QUERY = `#graphql
             product {
               id
               title
+              featuredImage {
+                url
+              }
             }
           }
           inventoryLevels(first: 20) {
@@ -60,7 +63,11 @@ type InventoryLevelsResponse = {
           variant?: {
             id: string;
             title?: string | null;
-            product?: { id: string; title?: string | null } | null;
+            product?: {
+              id: string;
+              title?: string | null;
+              featuredImage?: { url?: string | null } | null;
+            } | null;
           } | null;
           inventoryLevels: {
             edges: Array<{
@@ -148,6 +155,7 @@ export async function runBaselineImport(input: {
           productTitle: node.variant?.product?.title ?? null,
           variantTitle: node.variant?.title ?? null,
           sku: node.sku ?? null,
+          imageUrl: node.variant?.product?.featuredImage?.url ?? null,
           tracked: node.tracked,
           deletedAt: null,
         },
@@ -157,6 +165,7 @@ export async function runBaselineImport(input: {
           productTitle: node.variant?.product?.title ?? null,
           variantTitle: node.variant?.title ?? null,
           sku: node.sku ?? null,
+          imageUrl: node.variant?.product?.featuredImage?.url ?? null,
           tracked: node.tracked,
           deletedAt: null,
         },

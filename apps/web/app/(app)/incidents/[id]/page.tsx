@@ -7,6 +7,7 @@ import { Card, CardTitle } from "../../../../components/Card";
 import { PageHeader } from "../../../../components/shared/PageHeader";
 import { EmptyState } from "../../../../components/shared/EmptyState";
 import { Button } from "../../../../components/Button";
+import { PlanLockBadge } from "../../../../components/PlanLockBadge";
 import { useToast } from "../../../../components/Toast";
 import { apiRequest } from "../../../../lib/api";
 import { DEMO_INCIDENTS } from "../../../../lib/demo-data";
@@ -15,7 +16,10 @@ import {
   toApiStatus,
   type ApiIncident,
 } from "../../../../lib/map-incident";
-import type { IncidentDetailResponse } from "../../../../lib/types";
+import type {
+  BillingStatusResponse,
+  IncidentDetailResponse,
+} from "../../../../lib/types";
 import {
   severityLabel,
   statusColor,
@@ -52,6 +56,7 @@ export default function IncidentDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
+  const [aiQuotaLocked, setAiQuotaLocked] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,15 +65,26 @@ export default function IncidentDetailPage() {
       const found = DEMO_INCIDENTS.find((i) => i.id === id) ?? null;
       setData(found);
       if (!found) setError("Incident not found in demo data.");
+      setAiQuotaLocked(false);
       setLoading(false);
       return;
     }
     try {
-      const res = await apiRequest<ApiIncident>(
-        `/api/v1/incidents/${encodeURIComponent(id)}`,
-        { shop },
-      );
+      const [res, bill] = await Promise.all([
+        apiRequest<ApiIncident>(
+          `/api/v1/incidents/${encodeURIComponent(id)}`,
+          { shop },
+        ),
+        apiRequest<BillingStatusResponse>("/api/v1/billing/status", {
+          shop,
+        }).catch(() => null),
+      ]);
       setData(mapApiIncidentDetail(res));
+      const used = bill?.usage?.aiReportsUsed ?? 0;
+      const limit = bill?.usage?.aiReportsLimit;
+      setAiQuotaLocked(
+        typeof limit === "number" && limit >= 0 && used >= limit,
+      );
     } catch (e) {
       setData(null);
       setError(e instanceof Error ? e.message : "Failed to load incident");
@@ -362,9 +378,15 @@ export default function IncidentDetailPage() {
                 title="AI report"
                 subtitle="Explains evidence; never the source of truth"
                 action={
-                  <Button disabled={actionBusy} onClick={() => void generateAi()}>
-                    Generate
-                  </Button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <PlanLockBadge locked={aiQuotaLocked} />
+                    <Button
+                      disabled={actionBusy || aiQuotaLocked}
+                      onClick={() => void generateAi()}
+                    >
+                      Generate
+                    </Button>
+                  </div>
                 }
               />
               {report?.summary || report?.why_flagged ? (
@@ -415,13 +437,16 @@ export default function IncidentDetailPage() {
                   title="No AI report"
                   description="Generate a report when this incident is eligible. Reports explain evidence only."
                   action={
-                    <Button
-                      variant="primary"
-                      disabled={actionBusy}
-                      onClick={() => void generateAi()}
-                    >
-                      Generate AI report
-                    </Button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <PlanLockBadge locked={aiQuotaLocked} />
+                      <Button
+                        variant="primary"
+                        disabled={actionBusy || aiQuotaLocked}
+                        onClick={() => void generateAi()}
+                      >
+                        Generate AI report
+                      </Button>
+                    </div>
                   }
                 />
               )}

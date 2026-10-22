@@ -64,6 +64,7 @@ historyRouter.get("/history", requireMerchant, async (req, res, next) => {
               productTitle: true,
               variantTitle: true,
               sku: true,
+              imageUrl: true,
             },
           },
           location: { select: { id: true, name: true } },
@@ -71,8 +72,30 @@ historyRouter.get("/history", requireMerchant, async (req, res, next) => {
       }),
     ]);
 
+    // Prefer in-page prior reading for the same item+location; else leave null.
+    const withDelta = items.map((row, idx) => {
+      let previousQuantity: number | null = null;
+      for (let i = idx + 1; i < items.length; i++) {
+        const cand = items[i]!;
+        if (
+          cand.inventoryItemId === row.inventoryItemId &&
+          cand.locationId === row.locationId &&
+          cand.quantityName === row.quantityName
+        ) {
+          previousQuantity = cand.quantity;
+          break;
+        }
+      }
+      return {
+        ...row,
+        previousQuantity,
+        quantityDelta:
+          previousQuantity != null ? row.quantity - previousQuantity : null,
+      };
+    });
+
     res.json({
-      items,
+      items: withDelta,
       page,
       pageSize: PAGE_SIZE,
       total,

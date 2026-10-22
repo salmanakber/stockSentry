@@ -42,6 +42,7 @@ settingsRouter.get("/settings", requireMerchant, async (req, res, next) => {
           select: {
             planSlug: true,
             reconciliationIntervalHours: true,
+            reconciliationIntervalMinutes: true,
             onboardingCompleted: true,
           },
         }),
@@ -163,6 +164,7 @@ settingsRouter.patch("/settings", requireMerchant, async (req, res, next) => {
       ai?: unknown;
       retention?: unknown;
       reconciliationIntervalHours?: number;
+      reconciliationIntervalMinutes?: number;
       detectionRules?: Array<{
         ruleType: string;
         enabled?: boolean;
@@ -177,13 +179,45 @@ settingsRouter.patch("/settings", requireMerchant, async (req, res, next) => {
       }>;
     };
 
-    if (typeof body.reconciliationIntervalHours === "number") {
+    const monitoringBody =
+      body.monitoring && typeof body.monitoring === "object"
+        ? (body.monitoring as Record<string, unknown>)
+        : null;
+    const minutesFromBody =
+      typeof body.reconciliationIntervalMinutes === "number"
+        ? body.reconciliationIntervalMinutes
+        : typeof monitoringBody?.reconciliationIntervalMinutes === "number"
+          ? (monitoringBody.reconciliationIntervalMinutes as number)
+          : typeof body.reconciliationIntervalHours === "number"
+            ? body.reconciliationIntervalHours * 60
+            : null;
+
+    if (minutesFromBody != null && Number.isFinite(minutesFromBody)) {
+      const minutes = Math.max(1, Math.min(24 * 60, Math.round(minutesFromBody)));
+      const hours = Math.max(1, Math.round(minutes / 60));
+      await prisma.shop.update({
+        where: { id: shopId },
+        data: {
+          reconciliationIntervalMinutes: minutes,
+          reconciliationIntervalHours: hours,
+        },
+      });
+      if (monitoringBody) {
+        monitoringBody.reconciliationIntervalMinutes = minutes;
+        monitoringBody.reconciliationIntervalHours = hours;
+        body.monitoring = monitoringBody;
+      }
+    } else if (typeof body.reconciliationIntervalHours === "number") {
       await prisma.shop.update({
         where: { id: shopId },
         data: {
           reconciliationIntervalHours: Math.max(
             1,
             body.reconciliationIntervalHours,
+          ),
+          reconciliationIntervalMinutes: Math.max(
+            1,
+            Math.round(body.reconciliationIntervalHours * 60),
           ),
         },
       });
@@ -281,6 +315,7 @@ settingsRouter.patch("/settings", requireMerchant, async (req, res, next) => {
         select: {
           planSlug: true,
           reconciliationIntervalHours: true,
+          reconciliationIntervalMinutes: true,
           onboardingCompleted: true,
         },
       }),

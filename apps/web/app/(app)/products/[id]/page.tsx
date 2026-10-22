@@ -5,13 +5,17 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Button } from "../../../../components/Button";
 import { Card, CardTitle } from "../../../../components/Card";
+import { PlanLockBadge } from "../../../../components/PlanLockBadge";
 import { useShell } from "../../../../components/AppShell";
 import { useToast } from "../../../../components/Toast";
 import { EmptyState } from "../../../../components/shared/EmptyState";
 import { PageHeader } from "../../../../components/shared/PageHeader";
 import { IncidentSummaryBadge } from "../../../../components/IncidentBadge";
 import { apiRequest } from "../../../../lib/api";
-import type { ProductDetailResponse } from "../../../../lib/types";
+import type {
+  BillingStatusResponse,
+  ProductDetailResponse,
+} from "../../../../lib/types";
 import { useShop } from "../../../../providers";
 import { useReveal } from "../../../../hooks/useReveal";
 
@@ -55,15 +59,26 @@ export default function ProductReportPage() {
   const [loading, setLoading] = useState(true);
   const [historyPage, setHistoryPage] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [aiQuotaLocked, setAiQuotaLocked] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiRequest<ProductDetailResponse>(
-        `/api/v1/products/${encodeURIComponent(id)}?historyPage=${historyPage}`,
-        { shop },
-      );
+      const [res, bill] = await Promise.all([
+        apiRequest<ProductDetailResponse>(
+          `/api/v1/products/${encodeURIComponent(id)}?historyPage=${historyPage}`,
+          { shop },
+        ),
+        apiRequest<BillingStatusResponse>("/api/v1/billing/status", {
+          shop,
+        }).catch(() => null),
+      ]);
       setData(res);
+      const used = bill?.usage?.aiReportsUsed ?? 0;
+      const limit = bill?.usage?.aiReportsLimit;
+      setAiQuotaLocked(
+        typeof limit === "number" && limit >= 0 && used >= limit,
+      );
     } catch {
       setData(null);
     } finally {
@@ -199,13 +214,16 @@ export default function ProductReportPage() {
                   title="Refill suggestion"
                   subtitle="Observed low quantity — suggestion only"
                   action={
-                    <Button
-                      variant="primary"
-                      disabled={busy}
-                      onClick={() => void generateReport()}
-                    >
-                      {busy ? "Generating…" : "Generate product report"}
-                    </Button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <PlanLockBadge locked={aiQuotaLocked} />
+                      <Button
+                        variant="primary"
+                        disabled={busy || aiQuotaLocked}
+                        onClick={() => void generateReport()}
+                      >
+                        {busy ? "Generating…" : "Generate product report"}
+                      </Button>
+                    </div>
                   }
                 />
                 <div className="facts" style={{ marginBottom: 12 }}>
@@ -351,13 +369,16 @@ export default function ProductReportPage() {
                 title="AI Product Report"
                 subtitle="Risk summary from this product's evidence only"
                 action={
-                  <Button
-                    variant="primary"
-                    disabled={busy}
-                    onClick={() => void generateReport()}
-                  >
-                    {busy ? "Generating…" : "Generate"}
-                  </Button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <PlanLockBadge locked={aiQuotaLocked} />
+                    <Button
+                      variant="primary"
+                      disabled={busy || aiQuotaLocked}
+                      onClick={() => void generateReport()}
+                    >
+                      {busy ? "Generating…" : "Generate"}
+                    </Button>
+                  </div>
                 }
               />
               {report?.status ? (

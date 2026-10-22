@@ -22,10 +22,23 @@ import type {
 } from "../../../lib/types";
 import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
-import { ruleTypeLabel } from "@stocksentry/shared";
+import { ADVANCED_RULE_TYPES, ruleTypeLabel } from "@stocksentry/shared";
 import { refreshAppGates } from "../../../lib/gates";
+import { PlanLockBadge } from "../../../components/PlanLockBadge";
 
 const SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
+
+const VERIFICATION_INTERVALS = [
+  { minutes: 1, label: "1 minute" },
+  { minutes: 5, label: "5 minutes" },
+  { minutes: 15, label: "15 minutes" },
+  { minutes: 30, label: "30 minutes" },
+  { minutes: 60, label: "1 hour" },
+  { minutes: 120, label: "2 hours" },
+  { minutes: 360, label: "6 hours" },
+  { minutes: 720, label: "12 hours" },
+  { minutes: 1440, label: "24 hours" },
+] as const;
 
 const TABS = [
   { id: "monitoring", label: "Monitoring" },
@@ -97,7 +110,7 @@ export default function SettingsPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [intervalHours, setIntervalHours] = useState(6);
+  const [intervalMinutes, setIntervalMinutes] = useState(360);
   const [refillThreshold, setRefillThreshold] = useState(10);
   const [thresholds, setThresholds] = useState<SettingsThresholds>({
     absoluteChangeThreshold: 30,
@@ -135,10 +148,32 @@ export default function SettingsPage() {
   const [testBusy, setTestBusy] = useState(false);
 
   const applySettings = (res: SettingsResponse) => {
-    setIntervalHours(
-      res.shop?.reconciliationIntervalHours ??
-        num(res.settings?.thresholds?.reconciliationIntervalHours, 6),
-    );
+    const monitoring = (res.settings?.monitoring ?? {}) as {
+      refillThreshold?: unknown;
+      reconciliationIntervalHours?: unknown;
+      reconciliationIntervalMinutes?: unknown;
+    };
+    const fromShopMin = res.shop?.reconciliationIntervalMinutes;
+    const fromMonMin = num(monitoring.reconciliationIntervalMinutes, 0);
+    const rawMinutes =
+      typeof fromShopMin === "number" && fromShopMin > 0
+        ? fromShopMin
+        : fromMonMin > 0
+          ? fromMonMin
+          : (res.shop?.reconciliationIntervalHours ??
+              num(monitoring.reconciliationIntervalHours, 6)) * 60;
+    const exact = VERIFICATION_INTERVALS.find((o) => o.minutes === rawMinutes);
+    if (exact) {
+      setIntervalMinutes(exact.minutes);
+    } else {
+      let best: number = 360;
+      for (const o of VERIFICATION_INTERVALS) {
+        if (Math.abs(o.minutes - rawMinutes) < Math.abs(best - rawMinutes)) {
+          best = o.minutes;
+        }
+      }
+      setIntervalMinutes(best);
+    }
     const t = (res.settings?.thresholds ?? {}) as SettingsThresholds;
     setThresholds({
       absoluteChangeThreshold: num(t.absoluteChangeThreshold, 30),
@@ -147,10 +182,6 @@ export default function SettingsPage() {
       repeatedChangeWindowMinutes: num(t.repeatedChangeWindowMinutes, 10),
       duplicateSuppressionMinutes: num(t.duplicateSuppressionMinutes, 30),
     });
-    const monitoring = (res.settings?.monitoring ?? {}) as {
-      refillThreshold?: unknown;
-      reconciliationIntervalHours?: unknown;
-    };
     setRefillThreshold(num(monitoring.refillThreshold, 10));
     setRules(res.detectionRules ?? []);
     setAiSettings(
@@ -245,14 +276,17 @@ export default function SettingsPage() {
             : null,
       }));
 
+      const hours = Math.max(1, Math.round(intervalMinutes / 60));
       const res = await apiRequest<SettingsResponse>("/api/v1/settings", {
         method: "PATCH",
         shop,
         body: JSON.stringify({
-          reconciliationIntervalHours: intervalHours,
+          reconciliationIntervalMinutes: intervalMinutes,
+          reconciliationIntervalHours: hours,
           thresholds,
           monitoring: {
-            reconciliationIntervalHours: intervalHours,
+            reconciliationIntervalMinutes: intervalMinutes,
+            reconciliationIntervalHours: hours,
             refillThreshold: Math.max(0, refillThreshold),
           },
           detectionRules: rules.map((r) => ({
@@ -419,18 +453,22 @@ export default function SettingsPage() {
               />
               <div className="field-row">
                 <div className="field">
-                  <label htmlFor="rec-hours">
-                    Inventory verification interval (hours)
+                  <label htmlFor="rec-interval">
+                    Inventory verification interval
                   </label>
-                  <input
-                    id="rec-hours"
-                    type="number"
-                    min={1}
-                    value={intervalHours}
+                  <select
+                    id="rec-interval"
+                    value={intervalMinutes}
                     onChange={(e) =>
-                      setIntervalHours(Math.max(1, Number(e.target.value) || 1))
+                      setIntervalMinutes(Number(e.target.value) || 360)
                     }
-                  />
+                  >
+                    {VERIFICATION_INTERVALS.map((o) => (
+                      <option key={o.minutes} value={o.minutes}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="field">
                   <label htmlFor="refill-th">Refill threshold (qty)</label>
@@ -541,24 +579,40 @@ export default function SettingsPage() {
                   description="Rules are seeded on install. Sync or reinstall if this list stays empty."
                 />
               ) : (
-                rules.map((r) => (
-                  <label className="field-check" key={r.ruleType}>
-                    <input
-                      type="checkbox"
-                      checked={r.enabled}
-                      onChange={(e) =>
-                        setRules((prev) =>
-                          prev.map((x) =>
-                            x.ruleType === r.ruleType
-                              ? { ...x, enabled: e.target.checked }
-                              : x,
-                          ),
-                        )
-                      }
-                    />
-                    <span>{ruleTypeLabel(r.ruleType)}</span>
-                  </label>
-                ))
+                rules.map((r) => {
+                  const advanced = (
+                    ADVANCED_RULE_TYPES as readonly string[]
+                  ).includes(r.ruleType);
+                  const locked =
+                    advanced && !billing?.entitlements?.advancedRules;
+                  return (
+                    <label className="field-check" key={r.ruleType}>
+                      <input
+                        type="checkbox"
+                        checked={r.enabled}
+                        disabled={locked && !r.enabled}
+                        onChange={(e) =>
+                          setRules((prev) =>
+                            prev.map((x) =>
+                              x.ruleType === r.ruleType
+                                ? { ...x, enabled: e.target.checked }
+                                : x,
+                            ),
+                          )
+                        }
+                      />
+                      <span>
+                        {ruleTypeLabel(r.ruleType)}
+                        {locked ? (
+                          <>
+                            {" "}
+                            <PlanLockBadge label="Not on your plan" />
+                          </>
+                        ) : null}
+                      </span>
+                    </label>
+                  );
+                })
               )}
             </Card>
           ) : null}

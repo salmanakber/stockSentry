@@ -1,26 +1,35 @@
 import { prisma } from "@stocksentry/database";
-import { computeMonitoringHealth } from "@stocksentry/shared";
+import {
+  computeMonitoringHealth,
+  resolveReconciliationIntervalHours,
+  resolveReconciliationIntervalMinutes,
+} from "@stocksentry/shared";
 
 export function nextReconcileAt(
   lastReconciledAt: Date | null,
-  intervalHours: number,
+  intervalHoursOrMinutes: number,
   now = new Date(),
+  /** When true, treat the number as minutes instead of hours. */
+  asMinutes = false,
 ): Date {
   if (!lastReconciledAt) {
     return now;
   }
-  return new Date(
-    lastReconciledAt.getTime() + Math.max(1, intervalHours) * 60 * 60 * 1000,
-  );
+  const ms = asMinutes
+    ? Math.max(1, intervalHoursOrMinutes) * 60 * 1000
+    : Math.max(1 / 60, intervalHoursOrMinutes) * 60 * 60 * 1000;
+  return new Date(lastReconciledAt.getTime() + ms);
 }
 
 export async function getShopMonitoringSnapshot(shopId: string) {
   const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+  const intervalMinutes = resolveReconciliationIntervalMinutes(shop);
   const monitoringStatus = computeMonitoringHealth({
     installationStatus: shop.installationStatus,
     lastWebhookAt: shop.lastWebhookAt,
     lastReconciledAt: shop.lastReconciledAt,
-    reconciliationIntervalHours: shop.reconciliationIntervalHours,
+    reconciliationIntervalHours: resolveReconciliationIntervalHours(shop),
+    reconciliationIntervalMinutes: intervalMinutes,
   });
 
   return {
@@ -28,7 +37,9 @@ export async function getShopMonitoringSnapshot(shopId: string) {
     monitoringStatus,
     nextReconcileAt: nextReconcileAt(
       shop.lastReconciledAt,
-      shop.reconciliationIntervalHours,
+      intervalMinutes,
+      new Date(),
+      true,
     ),
   };
 }

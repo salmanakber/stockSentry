@@ -9,10 +9,12 @@ import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { IncidentSummaryBadge } from "../../../components/IncidentBadge";
 import { ProductPickerModal } from "../../../components/ProductPickerModal";
+import { PlanLockBadge } from "../../../components/PlanLockBadge";
 import { UpgradeBanner } from "../../../components/UpgradeBanner";
 import { apiRequest } from "../../../lib/api";
 import { DEMO_BUNDLES } from "../../../lib/demo-data";
 import type {
+  BillingStatusResponse,
   BundleGroup,
   BundlesListResponse,
   ProductItem,
@@ -65,6 +67,7 @@ export default function BundlesPage() {
     code?: string;
     message?: string;
   } | null>(null);
+  const [atBundleLimit, setAtBundleLimit] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,17 +79,25 @@ export default function BundlesPage() {
           if (prev && DEMO_BUNDLES.some((g) => g.id === prev)) return prev;
           return DEMO_BUNDLES[0]?.id ?? null;
         });
+        setAtBundleLimit(false);
         return;
       }
-      const res = await apiRequest<BundlesListResponse>("/api/v1/bundles", {
-        shop,
-      });
+      const [res, bill] = await Promise.all([
+        apiRequest<BundlesListResponse>("/api/v1/bundles", { shop }),
+        apiRequest<BillingStatusResponse>("/api/v1/billing/status", {
+          shop,
+        }).catch(() => null),
+      ]);
       const next = res?.items ?? [];
       setGroups(next);
       setSelectedId((prev) => {
         if (prev && next.some((g) => g.id === prev)) return prev;
         return next[0]?.id ?? null;
       });
+      const max = bill?.entitlements?.maxBundleGroups;
+      setAtBundleLimit(
+        typeof max === "number" && max >= 0 && next.length >= max,
+      );
     } catch (e) {
       setGroups([]);
       setError(e instanceof Error ? e.message : "Failed to load bundle groups");
@@ -412,14 +423,26 @@ export default function BundlesPage() {
                     disabled={demo}
                   />
                 </div>
-                <Button
-                  variant="primary"
-                  disabled={!name.trim() || creating || demo}
-                  onClick={() => void createGroup()}
-                  title={entitlement ? "Upgrade to Pro" : undefined}
+                <div
+                  className="form-actions"
+                  style={{ alignItems: "center", marginTop: 0 }}
                 >
-                  {creating ? "Creating…" : "Create group"}
-                </Button>
+                  <Button
+                    variant="primary"
+                    disabled={
+                      !name.trim() || creating || demo || atBundleLimit
+                    }
+                    onClick={() => void createGroup()}
+                    title={
+                      atBundleLimit || entitlement
+                        ? "Upgrade to Pro"
+                        : undefined
+                    }
+                  >
+                    {creating ? "Creating…" : "Create group"}
+                  </Button>
+                  <PlanLockBadge locked={atBundleLimit} />
+                </div>
               </div>
             </Card>
           </aside>

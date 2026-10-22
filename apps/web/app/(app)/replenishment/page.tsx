@@ -9,9 +9,11 @@ import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { PageHeader } from "../../../components/shared/PageHeader";
+import { PlanLockBadge } from "../../../components/PlanLockBadge";
 import { ProductPickerModal } from "../../../components/ProductPickerModal";
 import { apiRequest } from "../../../lib/api";
 import type {
+  BillingStatusResponse,
   BundleGroup,
   BundlesListResponse,
   ProductItem,
@@ -79,6 +81,7 @@ export default function ReplenishmentPage() {
   const [restockQty, setRestockQty] = useState("50");
   const [autoEmail, setAutoEmail] = useState(false);
   const [requireApproval, setRequireApproval] = useState(true);
+  const [automationEnabled, setAutomationEnabled] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,9 +91,10 @@ export default function ReplenishmentPage() {
         setRequests([]);
         setSuppliers([]);
         setBundles([]);
+        setAutomationEnabled(true);
         return;
       }
-      const [rulesRes, reqRes, supRes, bunRes] = await Promise.all([
+      const [rulesRes, reqRes, supRes, bunRes, bill] = await Promise.all([
         apiRequest<{ items?: ReplenishmentRule[] }>(
           "/api/v1/replenishment/rules",
           { shop },
@@ -101,11 +105,17 @@ export default function ReplenishmentPage() {
         ),
         apiRequest<SuppliersListResponse>("/api/v1/suppliers", { shop }),
         apiRequest<BundlesListResponse>("/api/v1/bundles", { shop }),
+        apiRequest<BillingStatusResponse>("/api/v1/billing/status", {
+          shop,
+        }).catch(() => null),
       ]);
       setRules(rulesRes?.items ?? []);
       setRequests(reqRes?.items ?? []);
       setSuppliers(supRes?.items ?? []);
       setBundles(bunRes?.items ?? []);
+      setAutomationEnabled(
+        bill?.entitlements?.supplierAutomation !== false,
+      );
       setSupplierId((prev) => {
         if (prev) return prev;
         return supRes?.items?.[0]?.id ?? "";
@@ -352,13 +362,20 @@ export default function ReplenishmentPage() {
                 </div>
               </div>
               <div className="field">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={autoEmail}
-                    onChange={(e) => setAutoEmail(e.target.checked)}
-                  />{" "}
-                  Auto-email when threshold hit
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>
+                    <input
+                      type="checkbox"
+                      checked={autoEmail && automationEnabled}
+                      disabled={!automationEnabled}
+                      onChange={(e) => setAutoEmail(e.target.checked)}
+                    />{" "}
+                    Auto-email when threshold hit
+                  </span>
+                  <PlanLockBadge
+                    locked={!automationEnabled}
+                    label="Not on your plan"
+                  />
                 </label>
               </div>
               <div className="field">

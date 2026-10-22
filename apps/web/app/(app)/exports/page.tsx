@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/Button";
 import { Card, CardTitle } from "../../../components/Card";
+import { PlanLockBadge } from "../../../components/PlanLockBadge";
 import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { PageHeader } from "../../../components/shared/PageHeader";
 import { apiRequest, downloadAuthenticated } from "../../../lib/api";
-import type { ExportJob, ExportsListResponse } from "../../../lib/types";
+import type {
+  BillingStatusResponse,
+  ExportJob,
+  ExportsListResponse,
+} from "../../../lib/types";
 import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
 
@@ -40,14 +45,21 @@ export default function ExportsPage() {
   const [loading, setLoading] = useState(true);
   const [exportType, setExportType] = useState("incidents");
   const [creating, setCreating] = useState(false);
+  const [exportsEnabled, setExportsEnabled] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiRequest<ExportsListResponse>("/api/v1/exports", {
-        shop,
-      });
+      const [res, bill] = await Promise.all([
+        apiRequest<ExportsListResponse>("/api/v1/exports", { shop }),
+        apiRequest<BillingStatusResponse>("/api/v1/billing/status", {
+          shop,
+        }).catch(() => null),
+      ]);
       setItems(res?.items ?? []);
+      if (bill?.entitlements?.exportsEnabled != null) {
+        setExportsEnabled(Boolean(bill.entitlements.exportsEnabled));
+      }
     } catch {
       setItems([]);
     } finally {
@@ -62,7 +74,7 @@ export default function ExportsPage() {
   useReveal(ready && !loading, null, [items, ready, loading]);
 
   const createJob = async () => {
-    if (creating) return;
+    if (creating || !exportsEnabled) return;
     setCreating(true);
     try {
       await apiRequest("/api/v1/exports", {
@@ -143,14 +155,15 @@ export default function ExportsPage() {
               ))}
             </select>
           </div>
-          <div className="form-actions">
+          <div className="form-actions" style={{ alignItems: "center" }}>
             <Button
               variant="primary"
-              disabled={creating}
+              disabled={creating || !exportsEnabled}
               onClick={() => void createJob()}
             >
               {creating ? "Queueing…" : "Create export job"}
             </Button>
+            <PlanLockBadge locked={!exportsEnabled} />
           </div>
         </Card>
 

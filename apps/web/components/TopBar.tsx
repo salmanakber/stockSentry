@@ -26,6 +26,9 @@ export function TopBar({
       >
         <Icon id="mn" />
       </button>
+      <Link href="/overview" className="top-brand" aria-label="StockSentry">
+        <img src="/images/logo.png" alt="StockSentry" />
+      </Link>
       <button
         type="button"
         className="sr"

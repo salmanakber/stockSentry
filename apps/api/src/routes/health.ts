@@ -17,6 +17,8 @@ healthRouter.get("/health", (_req, res) => {
       lastWebhookAt: new Date(),
       lastReconciledAt: new Date(),
       reconciliationIntervalHours: DETECTION_DEFAULTS.reconciliationIntervalHours,
+      reconciliationIntervalMinutes:
+        DETECTION_DEFAULTS.reconciliationIntervalMinutes,
     }),
   });
 });

@@ -13,6 +13,7 @@ import {
   detectionRuleConfigSchema,
   exceedsAbsoluteThreshold,
   exceedsPercentageThreshold,
+  resolveReconciliationIntervalMinutes,
   type DetectionRuleConfig,
 } from "@stocksentry/shared";
 import {
@@ -607,12 +608,12 @@ export async function evaluateStaleMonitoring(shopId: string): Promise<Incident 
   });
   if (!rule?.enabled) return null;
 
-  const interval = shop.reconciliationIntervalHours || 6;
+  const intervalMinutes = resolveReconciliationIntervalMinutes(shop);
   const now = new Date();
   const last = shop.lastReconciledAt;
   if (!last) return null;
-  const hours = (now.getTime() - last.getTime()) / (1000 * 60 * 60);
-  if (hours <= interval * 2) return null;
+  const minutes = (now.getTime() - last.getTime()) / (1000 * 60);
+  if (minutes <= intervalMinutes * 2) return null;
 
   const config = parseConfig(rule.configuration);
   const incidentKey = `STALE_MONITORING:shop:${shopId}`;
@@ -638,7 +639,7 @@ export async function evaluateStaleMonitoring(shopId: string): Promise<Incident 
       shopId,
       incidentKey,
       type: "STALE_MONITORING",
-      severity: hours > interval * 4 ? "HIGH" : "MEDIUM",
+      severity: minutes > intervalMinutes * 4 ? "HIGH" : "MEDIUM",
       status: "NEW",
       ruleType: "STALE_MONITORING",
       ruleVersion: rule.version,
@@ -656,8 +657,10 @@ export async function evaluateStaleMonitoring(shopId: string): Promise<Incident 
       observationIds: [],
       evidencePayload: {
         lastReconciledAt: last.toISOString(),
-        hoursSinceReconcile: hours,
-        intervalHours: interval,
+        minutesSinceReconcile: minutes,
+        intervalMinutes,
+        hoursSinceReconcile: minutes / 60,
+        intervalHours: intervalMinutes / 60,
       },
     },
   });
