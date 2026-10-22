@@ -492,6 +492,9 @@ adminRouter.post("/plans", requireAdmin, async (req, res, next) => {
         advancedRules: Boolean(b.advancedRules),
         exportsEnabled: Boolean(b.exportsEnabled),
         teamWorkflows: Boolean(b.teamWorkflows),
+        supplierAutomation: Boolean(b.supplierAutomation),
+        maxBundleGroups: Number(b.maxBundleGroups ?? 2),
+        maxSuppliers: Number(b.maxSuppliers ?? 1),
         isFree: Boolean(b.isFree ?? Number(b.priceUsdMonthly ?? 0) <= 0),
         active: b.active !== false,
         sortOrder: Number(b.sortOrder ?? 0),
@@ -537,6 +540,11 @@ adminRouter.patch("/plans/:idOrSlug", requireAdmin, async (req, res, next) => {
     if (b.exportsEnabled != null)
       data.exportsEnabled = Boolean(b.exportsEnabled);
     if (b.teamWorkflows != null) data.teamWorkflows = Boolean(b.teamWorkflows);
+    if (b.supplierAutomation != null)
+      data.supplierAutomation = Boolean(b.supplierAutomation);
+    if (b.maxBundleGroups != null)
+      data.maxBundleGroups = Number(b.maxBundleGroups);
+    if (b.maxSuppliers != null) data.maxSuppliers = Number(b.maxSuppliers);
     if (b.isFree != null) data.isFree = Boolean(b.isFree);
     if (b.active != null) data.active = Boolean(b.active);
     if (b.sortOrder != null) data.sortOrder = Number(b.sortOrder);

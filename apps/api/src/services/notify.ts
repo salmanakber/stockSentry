@@ -459,3 +459,135 @@ export async function enqueueTestEmail(input: {
 
   return { deliveryId: delivery.id, to };
 }
+
+/**
+ * Enqueue / send DIGEST emails for shops with EMAIL.digestEnabled.
+ * Intended to run from a daily worker cron; send once per ISO week per shop.
+ */
+export async function enqueueWeeklyDigests(): Promise<{
+  sent: number;
+  skipped: number;
+}> {
+  const prefs = await prisma.notificationPreference.findMany({
+    where: {
+      channel: "EMAIL",
+      digestEnabled: true,
+      enabled: true,
+    },
+    include: {
+      shop: {
+        select: {
+          id: true,
+          shopDomain: true,
+          installationStatus: true,
+        },
+      },
+    },
+  });
+
+  let sent = 0;
+  let skipped = 0;
+  const weekKey = isoWeekKey(new Date());
+
+  for (const pref of prefs) {
+    if (pref.shop.installationStatus !== "INSTALLED") {
+      skipped += 1;
+      continue;
+    }
+    const to = pref.destinationRef?.trim() ?? "";
+    if (!to.includes("@")) {
+      skipped += 1;
+      continue;
+    }
+
+    const already = await prisma.notificationDelivery.findFirst({
+      where: {
+        shopId: pref.shopId,
+        channel: "EMAIL",
+        destination: to,
+        errorCode: `digest:${weekKey}`,
+        status: "SENT",
+      },
+    });
+    if (already) {
+      skipped += 1;
+      continue;
+    }
+
+    const openCount = await prisma.incident.count({
+      where: {
+        shopId: pref.shopId,
+        status: { in: ["NEW", "INVESTIGATING"] },
+      },
+    });
+
+    const summary = `Weekly digest for ${pref.shop.shopDomain}: ${openCount} open incident${openCount === 1 ? "" : "s"} needing review. StockSentry is read-only and does not change Shopify inventory.`;
+
+    const delivery = await prisma.notificationDelivery.create({
+      data: {
+        shopId: pref.shopId,
+        channel: "EMAIL",
+        destination: to,
+        status: "PENDING",
+        errorCode: `digest:${weekKey}`,
+      },
+    });
+
+    const result = await sendTemplatedEmail({
+      shopId: pref.shopId,
+      to,
+      key: "DIGEST",
+      vars: {
+        shopName: pref.shop.shopDomain,
+        summary,
+        incidentTitle: "Weekly digest",
+        severity: "INFO",
+        productTitle: "—",
+        locationName: "—",
+        previousQuantity: "—",
+        currentQuantity: "—",
+        quantityDelta: "—",
+        quantityBeforeAfter: "—",
+        whyFlagged: `${openCount} open incidents`,
+        confirmedNote: "Digest aggregates open incident counts only.",
+        disclaimer:
+          "StockSentry is read-only and does not change Shopify inventory.",
+        incidentUrl: `${appBaseUrl()}/incidents`,
+        productUrl: `${appBaseUrl()}/products`,
+        openIncidentCount: openCount,
+      },
+    });
+
+    await prisma.notificationDelivery.update({
+      where: { id: delivery.id },
+      data: result.ok
+        ? {
+            status: "SENT",
+            sentAt: new Date(),
+            attemptCount: 1,
+            errorCode: `digest:${weekKey}`,
+          }
+        : {
+            status: "FAILED",
+            attemptCount: 1,
+            errorCode: result.errorCode ?? "DIGEST_SEND_FAILED",
+          },
+    });
+
+    if (result.ok) sent += 1;
+    else skipped += 1;
+  }
+
+  return { sent, skipped };
+}
+
+function isoWeekKey(d: Date): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(
+    ((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}

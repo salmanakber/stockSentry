@@ -507,6 +507,9 @@ export interface MerchantPlan {
   advancedRules: boolean;
   exportsEnabled: boolean;
   teamWorkflows: boolean;
+  supplierAutomation?: boolean;
+  maxBundleGroups?: number;
+  maxSuppliers?: number;
   isFree?: boolean;
   active?: boolean;
 }

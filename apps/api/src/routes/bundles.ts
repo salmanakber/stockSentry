@@ -13,6 +13,10 @@ import {
   EMPTY_INCIDENT_SUMMARY,
   incidentSummariesForItems,
 } from "../services/incident-summary.js";
+import {
+  EntitlementError,
+  assertBundleGroupCapacity,
+} from "../services/billing.js";
 
 export const bundlesRouter = Router();
 
@@ -107,6 +111,8 @@ bundlesRouter.post("/bundles", requireMerchant, async (req, res, next) => {
       return;
     }
 
+    await assertBundleGroupCapacity(shopId, 1);
+
     const group = await prisma.bundleGroup.create({
       data: {
         shopId,
@@ -128,6 +134,14 @@ bundlesRouter.post("/bundles", requireMerchant, async (req, res, next) => {
 
     res.status(201).json(group);
   } catch (err) {
+    if (err instanceof EntitlementError) {
+      res.status(403).json({
+        error: err.code.toLowerCase(),
+        code: err.code,
+        message: err.message,
+      });
+      return;
+    }
     next(err);
   }
 });

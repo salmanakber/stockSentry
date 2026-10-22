@@ -63,6 +63,8 @@ model Shop {
   planAssignedByAdmin         Boolean            @default(false)
   /// True after uninstall/reinstall until merchant (or admin) selects a plan again.
   requiresPlanSelection       Boolean            @default(false)
+  /// Set when merchant selects Free or a paid plan succeeds; null until then.
+  planChosenAt                DateTime?
   billingStatus               BillingStatus      @default(NONE)
   shopifySubscriptionGid      String?
   onboardingCompleted         Boolean            @default(false)
@@ -136,6 +138,9 @@ model Plan {
   advancedRules      Boolean  @default(false)
   exportsEnabled     Boolean  @default(false)
   teamWorkflows      Boolean  @default(false)
+  supplierAutomation Boolean  @default(false)
+  maxBundleGroups    Int      @default(2)
+  maxSuppliers       Int      @default(1)
   isFree             Boolean  @default(false)
   active             Boolean  @default(true)
   sortOrder          Int      @default(0)

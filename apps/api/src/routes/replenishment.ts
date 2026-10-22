@@ -2,6 +2,10 @@ import { Router } from "express";
 import { prisma } from "@stocksentry/database";
 import { requireMerchant } from "../middleware/auth.js";
 import {
+  EntitlementError,
+  assertSupplierAutomation,
+} from "../services/billing.js";
+import {
   approveReplenishmentRequest,
   assertNoActiveRuleConflict,
   cancelReplenishmentRequest,
@@ -130,6 +134,10 @@ replenishmentRouter.post(
         return;
       }
 
+      if (body.autoEmailEnabled) {
+        await assertSupplierAutomation(shopId);
+      }
+
       const rule = await prisma.supplierReplenishmentRule.create({
         data: {
           shopId,
@@ -165,6 +173,14 @@ replenishmentRouter.post(
 
       res.status(201).json(rule);
     } catch (err) {
+      if (err instanceof EntitlementError) {
+        res.status(403).json({
+          error: err.code.toLowerCase(),
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
       next(err);
     }
   },
@@ -212,6 +228,10 @@ replenishmentRouter.patch(
       if (nextItemId && nextGroupId) {
         res.status(400).json({ error: "single_target_required" });
         return;
+      }
+
+      if (body.autoEmailEnabled === true) {
+        await assertSupplierAutomation(shopId);
       }
 
       const willBeActive = body.active !== undefined ? body.active : existing.active;
@@ -286,6 +306,14 @@ replenishmentRouter.patch(
 
       res.json(rule);
     } catch (err) {
+      if (err instanceof EntitlementError) {
+        res.status(403).json({
+          error: err.code.toLowerCase(),
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
       next(err);
     }
   },

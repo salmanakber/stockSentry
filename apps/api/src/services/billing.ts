@@ -197,6 +197,83 @@ export async function monitoredItemSoftLimit(shopId: string): Promise<number> {
   return (await resolvePlan(shop.planSlug)).maxMonitoredItems;
 }
 
+export async function assertBundleGroupCapacity(
+  shopId: string,
+  additional = 1,
+): Promise<{ used: number; limit: number; planSlug: string }> {
+  const id = requireShopId(shopId);
+  const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
+  const plan = await resolvePlan(shop.planSlug);
+  const used = await prisma.bundleGroup.count({ where: { shopId: id } });
+  if (used + additional > plan.maxBundleGroups) {
+    throw new EntitlementError(
+      ENTITLEMENT_ERROR_CODES.BUNDLE_GROUPS_EXCEEDED,
+      `Plan ${plan.slug} allows ${plan.maxBundleGroups} bundle groups (have ${used}). Upgrade to create more.`,
+    );
+  }
+  return { used, limit: plan.maxBundleGroups, planSlug: shop.planSlug };
+}
+
+export async function assertSupplierCapacity(
+  shopId: string,
+  additional = 1,
+): Promise<{ used: number; limit: number; planSlug: string }> {
+  const id = requireShopId(shopId);
+  const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
+  const plan = await resolvePlan(shop.planSlug);
+  const used = await prisma.supplier.count({ where: { shopId: id } });
+  if (used + additional > plan.maxSuppliers) {
+    throw new EntitlementError(
+      ENTITLEMENT_ERROR_CODES.SUPPLIERS_EXCEEDED,
+      `Plan ${plan.slug} allows ${plan.maxSuppliers} suppliers (have ${used}). Upgrade to add more.`,
+    );
+  }
+  return { used, limit: plan.maxSuppliers, planSlug: shop.planSlug };
+}
+
+export async function assertSupplierAutomation(
+  shopId: string,
+): Promise<void> {
+  const id = requireShopId(shopId);
+  const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
+  const plan = await resolvePlan(shop.planSlug);
+  if (!plan.supplierAutomation) {
+    throw new EntitlementError(
+      ENTITLEMENT_ERROR_CODES.SUPPLIER_AUTOMATION_REQUIRED,
+      `Supplier auto-email requires Pro or Growth. Your plan (${plan.slug}) does not include supplier automation.`,
+    );
+  }
+}
+
+export async function assertAdvancedRules(
+  shopId: string,
+): Promise<void> {
+  const id = requireShopId(shopId);
+  const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
+  const plan = await resolvePlan(shop.planSlug);
+  if (!plan.advancedRules) {
+    throw new EntitlementError(
+      ENTITLEMENT_ERROR_CODES.ADVANCED_RULES_REQUIRED,
+      `Advanced detection rules require Pro or Growth. Upgrade to enable these toggles.`,
+    );
+  }
+}
+
+/** Earliest allowed observation timestamp for this shop's plan history window. */
+export async function historyWindowStart(shopId: string): Promise<{
+  earliest: Date;
+  historyDays: number;
+  planSlug: string;
+}> {
+  const id = requireShopId(shopId);
+  const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
+  const plan = await resolvePlan(shop.planSlug);
+  const earliest = new Date(
+    Date.now() - plan.historyDays * 24 * 60 * 60 * 1000,
+  );
+  return { earliest, historyDays: plan.historyDays, planSlug: shop.planSlug };
+}
+
 export async function getBillingStatus(shopId: string) {
   const id = requireShopId(shopId);
   const shop = await prisma.shop.findUniqueOrThrow({ where: { id } });
@@ -266,6 +343,7 @@ export async function createPlanSubscription(input: {
         planId: freePlan?.id ?? null,
         planAssignedByAdmin: false,
         requiresPlanSelection: false,
+        planChosenAt: new Date(),
         billingStatus: "NONE",
         shopifySubscriptionGid: null,
       },
@@ -325,6 +403,7 @@ export async function createPlanSubscription(input: {
       planId: planRow?.id ?? null,
       planAssignedByAdmin: false,
       requiresPlanSelection: false,
+      planChosenAt: new Date(),
       billingStatus: "TRIAL",
       shopifySubscriptionGid: subscriptionId,
     },
@@ -395,6 +474,7 @@ export async function reconcileSubscriptionStatus(input: {
       planSlug: mappedSlug,
       planId: planRow?.id ?? null,
       requiresPlanSelection: false,
+      planChosenAt: new Date(),
       billingStatus,
       shopifySubscriptionGid: primary.id,
     },

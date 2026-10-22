@@ -10,7 +10,6 @@ import { GATES_REFRESH_EVENT } from "../../lib/gates";
 import type { BillingStatusResponse, OnboardingResponse } from "../../lib/types";
 import { useShop } from "../../providers";
 
-const PLAN_GATE_ALLOW = new Set(["/billing", "/help"]);
 const ONBOARDING_ALLOW = new Set([
   "/onboarding",
   "/settings",
@@ -33,6 +32,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const [planGate, setPlanGate] = useState<"loading" | "required" | "ok">(
     "loading",
   );
+  const [planGateError, setPlanGateError] = useState<string | null>(null);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const initialLoad = useRef(true);
 
@@ -40,6 +40,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     async (opts?: { silent?: boolean }) => {
       if (!authenticated || demo) {
         setPlanGate("ok");
+        setPlanGateError(null);
         setOnboardingDone(true);
         return;
       }
@@ -57,12 +58,18 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             () => null,
           ),
         ]);
+        setPlanGateError(null);
         setPlanGate(billing?.requiresPlanSelection ? "required" : "ok");
         setOnboardingDone(Boolean(onboarding?.completed));
-      } catch {
-        // Fail open so a flaky billing call does not brick the shell forever.
-        setPlanGate("ok");
-        setOnboardingDone(true);
+      } catch (e) {
+        // Fail closed — never silently unlock the app shell.
+        setPlanGate("required");
+        setPlanGateError(
+          e instanceof Error
+            ? e.message
+            : "Could not verify your plan. Retry to continue.",
+        );
+        setOnboardingDone(null);
       } finally {
         initialLoad.current = false;
       }
@@ -111,11 +118,10 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     }
 
     if (!demo && planGate === "required") {
-      if (PLAN_GATE_ALLOW.has(pathname)) {
-        return <AppShell demo={demo}>{children}</AppShell>;
-      }
       return (
         <PlanPicker
+          gateError={planGateError}
+          onRetry={() => void refreshGates()}
           onSelected={() => {
             window.dispatchEvent(new Event(GATES_REFRESH_EVENT));
           }}

@@ -19,6 +19,8 @@ export interface SidebarMeta {
   userInitials?: string;
   userName?: string;
   userRole?: string;
+  /** When true, show Upgrade CTA in footer. */
+  showUpgradeCta?: boolean;
 }
 
 const NAV: {
@@ -139,6 +141,7 @@ export function Sidebar({
   const userInitials = meta.userInitials ?? "?";
   const userName = meta.userName ?? "Shop";
   const userRole = meta.userRole ?? "read-only access";
+  const showUpgradeCta = Boolean(meta.showUpgradeCta);
 
   return (
     <aside className="side" id="side">
@@ -227,6 +230,17 @@ export function Sidebar({
             <i style={{ ["--w" as string]: `${planPct}%` }} />
           </span>
         </div>
+        {showUpgradeCta ? (
+          <div className="side-upgrade">
+            <b>Unlock more capacity</b>
+            <span>Exports, deeper history, and supplier automation on Pro.</span>
+            <Link href="/billing" className="btn primary" onClick={() => {
+              if (mob()) onCloseMobile();
+            }}>
+              Upgrade
+            </Link>
+          </div>
+        ) : null}
         <div className="usr">
           <div className="av">{userInitials}</div>
           <div className="lb">

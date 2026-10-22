@@ -9,7 +9,6 @@ import { Icon } from "../../../components/IconSprite";
 import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
-import { PageHeader } from "../../../components/shared/PageHeader";
 import { IncidentSummaryBadge } from "../../../components/IncidentBadge";
 import { apiRequest } from "../../../lib/api";
 import {
@@ -44,6 +43,16 @@ function formatWhen(iso?: string | null): string {
   } catch {
     return iso;
   }
+}
+
+function severityFromSummary(
+  summary?: ProductItem["incidentSummary"],
+): "high" | "med" | "low" | null {
+  if (!summary?.openCount) return null;
+  const s = (summary.highestSeverity ?? "").toUpperCase();
+  if (s === "CRITICAL" || s === "HIGH") return "high";
+  if (s === "MEDIUM") return "med";
+  return "low";
 }
 
 export default function ProductsPage() {
@@ -170,64 +179,140 @@ export default function ProductsPage() {
 
   const demoQs = demo ? "?demo=1" : "";
 
-  return (
-    <div className="pg inventory-pg">
-      <PageHeader
-        title="Inventory"
-        subtitle="Monitored products, quantities, and locations from Shopify."
-        actions={
-          <>
-            <Link href={`/exports${demoQs}`} className="btn">
-              CSV export
-            </Link>
-            <Button
-              variant="primary"
-              onClick={() => void onSync()}
-              disabled={syncBusy || demo}
-            >
-              <Icon id="rf" className={`i${syncBusy ? " spin" : ""}`} />
-              {syncBusy ? "Syncing…" : "Sync now"}
-            </Button>
-          </>
-        }
-      />
+  const kpis = [
+    {
+      label: "Monitored",
+      value:
+        stats?.monitoredCount != null
+          ? stats.monitoredCount.toLocaleString()
+          : "—",
+      sub:
+        stats?.locationCount != null
+          ? `Across ${stats.locationCount} location${stats.locationCount === 1 ? "" : "s"}`
+          : "From catalog sync",
+      color: "var(--acc)",
+    },
+    {
+      label: "Open alerts",
+      value:
+        stats?.openIncidentProductCount != null
+          ? stats.openIncidentProductCount.toLocaleString()
+          : "—",
+      sub: "Products with open flags",
+      color: "var(--hot)",
+    },
+    {
+      label: "Locations",
+      value:
+        stats?.locationCount != null
+          ? stats.locationCount.toLocaleString()
+          : locations.length
+            ? String(locations.length)
+            : "—",
+      sub: "Active Shopify locations",
+      color: "#528bff",
+    },
+    {
+      label: "Last verified",
+      value: formatWhen(stats?.lastVerifiedAt),
+      sub: "Inventory verification run",
+      color: "#7a5af8",
+      compact: true,
+    },
+  ];
 
-      <section className="inv-stats">
-        <Card loading={statsLoading} className="inv-stat">
-          <div className="inv-stat-label">Monitored items</div>
-          <div className="inv-stat-value">
-            {stats?.monitoredCount != null
-              ? stats.monitoredCount.toLocaleString()
-              : "—"}
-          </div>
-          <div className="inv-stat-sub m">
-            {stats?.locationCount != null
-              ? `Across ${stats.locationCount} location${stats.locationCount === 1 ? "" : "s"}`
-              : "From catalog sync"}
-          </div>
-        </Card>
-        <Card loading={statsLoading} className="inv-stat">
-          <div className="inv-stat-label">Open incidents</div>
-          <div className="inv-stat-value hot">
-            {stats?.openIncidentProductCount != null
-              ? stats.openIncidentProductCount.toLocaleString()
-              : "—"}
-          </div>
-          <div className="inv-stat-sub m">Products with open flags</div>
-        </Card>
-        <Card loading={statsLoading} className="inv-stat">
-          <div className="inv-stat-label">Last verified</div>
-          <div className="inv-stat-value sm">
-            {formatWhen(stats?.lastVerifiedAt)}
-          </div>
-          <div className="inv-stat-sub m">
-            Inventory verification run
-          </div>
-        </Card>
+  return (
+    <div className="pg inv-page">
+      <header className="inv-hero">
+        <div className="inv-hero-copy">
+          <p className="inv-eyebrow">Catalog</p>
+          <h1>Inventory</h1>
+          <p>
+            Monitored products, quantities, and locations from Shopify — read
+            only, never written back.
+          </p>
+        </div>
+        <div className="inv-hero-actions">
+          <Link href={`/exports${demoQs}`} className="btn">
+            CSV export
+          </Link>
+          <Button
+            variant="primary"
+            onClick={() => void onSync()}
+            disabled={syncBusy || demo}
+          >
+            <Icon id="rf" className={`i${syncBusy ? " spin" : ""}`} />
+            {syncBusy ? "Syncing…" : "Sync now"}
+          </Button>
+        </div>
+      </header>
+
+      <section className="kp inv-kp">
+        {kpis.map((k, i) => (
+          <Card
+            key={k.label}
+            className="k hv"
+            hover
+            loading={statsLoading}
+            style={{ ["--d" as string]: `${i * 70}ms` }}
+          >
+            <div className="l">
+              <i style={{ background: k.color }} />
+              {k.label}
+            </div>
+            <div className={`v${k.compact ? " inv-kpi-sm" : ""}`}>{k.value}</div>
+            <div className="s">
+              <span>{k.sub}</span>
+            </div>
+          </Card>
+        ))}
       </section>
 
-      <div className="split">
-        <Card loading={loading}>
+      <div className="inv-filters-bar">
+        <div className="inv-pill">
+          <Icon id="sc" />
+          <input
+            type="search"
+            placeholder="Search title or SKU…"
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applySearch();
+            }}
+            aria-label="Search products"
+          />
+        </div>
+        <select
+          className="inv-pill-select"
+          aria-label="Filter by location"
+          value={locationId}
+          onChange={(e) => {
+            setPage(1);
+            setLocationId(e.target.value);
+          }}
+        >
+          <option value="">All locations</option>
+          {locations.map((loc) => (
+            <option key={loc.id} value={loc.id}>
+              {loc.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className={`inv-pill-toggle${hasOpenIncident ? " on" : ""}`}
+          onClick={() => {
+            setPage(1);
+            setHasOpenIncident((v) => !v);
+          }}
+        >
+          Open alerts only
+        </button>
+        <Button onClick={applySearch}>Search</Button>
+      </div>
+
+      <div className="split inv-split">
+        <Card loading={loading} className="inv-table-card">
           <CardTitle
             title="Products"
             subtitle={
@@ -236,45 +321,6 @@ export default function ProductsPage() {
                 : "Catalog under monitoring"
             }
           />
-          <div className="filters inv-filters">
-            <input
-              type="search"
-              placeholder="Search title or SKU…"
-              value={qInput}
-              onChange={(e) => setQInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") applySearch();
-              }}
-              aria-label="Search products"
-            />
-            <select
-              aria-label="Filter by location"
-              value={locationId}
-              onChange={(e) => {
-                setPage(1);
-                setLocationId(e.target.value);
-              }}
-            >
-              <option value="">All locations</option>
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name}
-                </option>
-              ))}
-            </select>
-            <label className="field-check inv-check">
-              <input
-                type="checkbox"
-                checked={hasOpenIncident}
-                onChange={(e) => {
-                  setPage(1);
-                  setHasOpenIncident(e.target.checked);
-                }}
-              />
-              Open incidents only
-            </label>
-            <Button onClick={applySearch}>Search</Button>
-          </div>
 
           {error ? (
             <EmptyState
@@ -290,7 +336,11 @@ export default function ProductsPage() {
           ) : !items.length && !loading ? (
             <EmptyState
               icon="pr"
-              title={q || locationId || hasOpenIncident ? "No matches" : "No products loaded"}
+              title={
+                q || locationId || hasOpenIncident
+                  ? "No matches"
+                  : "No products loaded"
+              }
               description={
                 q || locationId || hasOpenIncident
                   ? "Try clearing filters or searching a different term."
@@ -306,10 +356,11 @@ export default function ProductsPage() {
             />
           ) : items.length ? (
             <>
-              <div className="table-wrap">
-                <table className="table inv-table">
+              <div className="inv-table-wrap">
+                <table className="inv-data">
                   <thead>
                     <tr>
+                      <th>Severity</th>
                       <th>Product</th>
                       <th>SKU</th>
                       <th>Qty</th>
@@ -321,8 +372,22 @@ export default function ProductsPage() {
                   <tbody>
                     {items.map((item) => {
                       const last = item.observations?.[0];
+                      const sev = severityFromSummary(item.incidentSummary);
                       return (
-                        <tr key={item.id}>
+                        <tr key={item.id} className="inv-row">
+                          <td>
+                            {sev ? (
+                              <span className={`sev ${sev}`}>
+                                {sev === "high"
+                                  ? "High"
+                                  : sev === "med"
+                                    ? "Med"
+                                    : "Low"}
+                              </span>
+                            ) : (
+                              <span className="inv-sev-none">—</span>
+                            )}
+                          </td>
                           <td>
                             <Link
                               href={`/products/${encodeURIComponent(item.id)}${demoQs}`}
@@ -331,7 +396,7 @@ export default function ProductsPage() {
                               {productTitle(item)}
                             </Link>
                           </td>
-                          <td className="mono">
+                          <td className="mono inv-sku">
                             {item.sku?.trim() ? item.sku : "—"}
                           </td>
                           <td className="mono">
@@ -374,7 +439,7 @@ export default function ProductsPage() {
           ) : null}
         </Card>
 
-        <Card loading={loading}>
+        <Card loading={loading} className="inv-loc-card">
           <CardTitle
             title="Locations"
             subtitle="Active Shopify locations for this shop"
@@ -387,7 +452,7 @@ export default function ProductsPage() {
             />
           ) : (
             locations.map((loc) => (
-              <div className="list-row" key={loc.id}>
+              <div className="list-row inv-loc-row" key={loc.id}>
                 <div>
                   <b>{loc.name}</b>
                   <div className="m">

@@ -9,6 +9,7 @@ export const QUEUE_NAMES = {
   PRODUCT_REPORT: "product.report",
   NOTIFY_DELIVER: "notify.deliver",
   EXPORT_CSV: "export.csv",
+  DIGEST_CHECK: "notify.digest-check",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

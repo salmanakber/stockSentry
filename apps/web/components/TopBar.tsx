@@ -7,12 +7,14 @@ interface TopBarProps {
   demo?: boolean;
   hasNotifications?: boolean;
   onOpenMobile: () => void;
+  onOpenSearch?: () => void;
 }
 
 export function TopBar({
   demo = false,
   hasNotifications = false,
   onOpenMobile,
+  onOpenSearch,
 }: TopBarProps) {
   return (
     <div className="top">
@@ -24,11 +26,16 @@ export function TopBar({
       >
         <Icon id="mn" />
       </button>
-      <div className="sr">
+      <button
+        type="button"
+        className="sr"
+        onClick={() => onOpenSearch?.()}
+        aria-label="Search (⌘K)"
+      >
         <Icon id="sc" />
         Search products, incidents, locations…
         <kbd>⌘K</kbd>
-      </div>
+      </button>
       {demo ? <span className="tag">Sample data</span> : null}
       <Link
         href="/notifications"

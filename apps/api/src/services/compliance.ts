@@ -51,6 +51,7 @@ export async function handleShopRedact(shopDomain: string): Promise<void> {
       billingStatus: "NONE",
       shopifySubscriptionGid: null,
       requiresPlanSelection: true,
+      planChosenAt: null,
       onboardingCompleted: false,
       lastWebhookAt: null,
       lastReconciledAt: null,
@@ -103,6 +104,7 @@ export async function handleUninstall(shopDomain: string): Promise<void> {
       billingStatus: "NONE",
       shopifySubscriptionGid: null,
       requiresPlanSelection: true,
+      planChosenAt: null,
     },
   });
 

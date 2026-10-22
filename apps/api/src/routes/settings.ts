@@ -5,8 +5,15 @@ import {
   type IncidentSeverity,
   type Prisma,
 } from "@stocksentry/database";
-import { detectionRuleConfigSchema } from "@stocksentry/shared";
+import {
+  ADVANCED_RULE_TYPES,
+  detectionRuleConfigSchema,
+} from "@stocksentry/shared";
 import { requireMerchant } from "../middleware/auth.js";
+import {
+  EntitlementError,
+  assertAdvancedRules,
+} from "../services/billing.js";
 import { resolveEmailTemplate } from "../services/email.js";
 
 export const settingsRouter = Router();
@@ -208,6 +215,15 @@ settingsRouter.patch("/settings", requireMerchant, async (req, res, next) => {
     });
 
     if (body.detectionRules?.length) {
+      const enablingAdvanced = body.detectionRules.some(
+        (rule) =>
+          rule.enabled === true &&
+          (ADVANCED_RULE_TYPES as readonly string[]).includes(rule.ruleType),
+      );
+      if (enablingAdvanced) {
+        await assertAdvancedRules(shopId);
+      }
+
       for (const rule of body.detectionRules) {
         const configParsed = detectionRuleConfigSchema.safeParse(
           rule.configuration ?? {},
@@ -277,6 +293,14 @@ settingsRouter.patch("/settings", requireMerchant, async (req, res, next) => {
       notificationPreferences: notificationPrefs,
     });
   } catch (err) {
+    if (err instanceof EntitlementError) {
+      res.status(403).json({
+        error: err.code.toLowerCase(),
+        code: err.code,
+        message: err.message,
+      });
+      return;
+    }
     next(err);
   }
 });

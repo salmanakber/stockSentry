@@ -7,9 +7,9 @@ import { Card, CardTitle } from "../../../components/Card";
 import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
-import { PageHeader } from "../../../components/shared/PageHeader";
 import { IncidentSummaryBadge } from "../../../components/IncidentBadge";
 import { ProductPickerModal } from "../../../components/ProductPickerModal";
+import { UpgradeBanner } from "../../../components/UpgradeBanner";
 import { apiRequest } from "../../../lib/api";
 import { DEMO_BUNDLES } from "../../../lib/demo-data";
 import type {
@@ -35,6 +35,12 @@ function itemLabel(item?: {
   return item.sku ? `${base} (${item.sku})` : base;
 }
 
+function riskChip(g: BundleGroup): { label: string; kind: "hot" | "warn" | "ok" } {
+  if (g.hasOpenIncidents) return { label: "Open alerts", kind: "hot" };
+  if (g.hasRefillRisk) return { label: "Refill risk", kind: "warn" };
+  return { label: "Healthy", kind: "ok" };
+}
+
 export default function BundlesPage() {
   const { shop } = useShop();
   const { ready } = useShell();
@@ -55,6 +61,10 @@ export default function BundlesPage() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [entitlement, setEntitlement] = useState<{
+    code?: string;
+    message?: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,7 +118,6 @@ export default function BundlesPage() {
     }
     setEditName(g.name);
     setEditNotes(g.description ?? "");
-    // Only re-sync form when selection changes, not on every groups refresh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -121,6 +130,7 @@ export default function BundlesPage() {
       return;
     }
     setCreating(true);
+    setEntitlement(null);
     try {
       const created = await apiRequest<BundleGroup>("/api/v1/bundles", {
         method: "POST",
@@ -136,7 +146,13 @@ export default function BundlesPage() {
       await load();
       if (created?.id) setSelectedId(created.id);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Create failed");
+      const err = e as Error & { code?: string };
+      const code = err.code;
+      const message = e instanceof Error ? e.message : "Create failed";
+      if (typeof code === "string" && code.startsWith("ENTITLEMENT_")) {
+        setEntitlement({ code, message });
+      }
+      showToast(message);
     } finally {
       setCreating(false);
     }
@@ -218,6 +234,7 @@ export default function BundlesPage() {
           ? `Added ${added} product${added === 1 ? "" : "s"}`
           : "No new products to add",
       );
+      setPickerOpen(false);
       await load();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Add products failed");
@@ -227,6 +244,7 @@ export default function BundlesPage() {
   };
 
   const removeItem = async (groupId: string, itemId: string) => {
+    if (busyId) return;
     if (demo) {
       showToast("Removing is disabled in demo mode");
       return;
@@ -248,21 +266,49 @@ export default function BundlesPage() {
 
   return (
     <div className="pg bundle-studio">
-      <PageHeader
-        title="Bundle Groups"
-        subtitle="Map gift sets and kits to components — alerts only, never writes Shopify qty."
-      />
+      <header className="bundle-hero">
+        <div>
+          <p className="inv-eyebrow">Catalog</p>
+          <h1>Bundle Groups</h1>
+          <p>
+            Map gift sets and kits to components — alerts only, never writes
+            Shopify qty.
+          </p>
+        </div>
+      </header>
 
-      <Card className="bundle-how">
-        <CardTitle title="How it works" />
-        <p className="m" style={{ margin: 0 }}>
-          Create a group for a gift set or kit. Add the individual products that
-          make up the bundle. When a component has an open inventory incident or
-          low stock, StockSentry highlights the group so you can investigate
-          before the bundle oversells. StockSentry does not change Shopify
-          quantities.
-        </p>
-      </Card>
+      <section className="bundle-steps">
+        <div className="bundle-step" style={{ ["--k" as string]: 0 }}>
+          <span className="bundle-step-n">1</span>
+          <div>
+            <b>Create a group</b>
+            <small>Name the gift set or kit you sell</small>
+          </div>
+        </div>
+        <div className="bundle-step-line" aria-hidden />
+        <div className="bundle-step" style={{ ["--k" as string]: 1 }}>
+          <span className="bundle-step-n">2</span>
+          <div>
+            <b>Add components</b>
+            <small>Attach the products that make up the bundle</small>
+          </div>
+        </div>
+        <div className="bundle-step-line" aria-hidden />
+        <div className="bundle-step" style={{ ["--k" as string]: 2 }}>
+          <span className="bundle-step-n">3</span>
+          <div>
+            <b>Watch risk</b>
+            <small>Investigate when components flag or run low</small>
+          </div>
+        </div>
+      </section>
+
+      {entitlement ? (
+        <UpgradeBanner
+          code={entitlement.code}
+          message={entitlement.message}
+        />
+      ) : null}
 
       {error ? (
         <Card>
@@ -277,22 +323,76 @@ export default function BundlesPage() {
             }
           />
         </Card>
+      ) : !groups.length && !loading ? (
+        <Card className="bundle-empty-card">
+          <EmptyState
+            icon="bu"
+            title="No bundle groups yet"
+            description="Create a group for a kit or gift set, then add the products that make it up. StockSentry highlights risk — it never changes Shopify quantities."
+            action={
+              <div className="bundle-empty-form">
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Holiday gift set"
+                  disabled={demo}
+                  aria-label="New group name"
+                />
+                <Button
+                  variant="primary"
+                  disabled={!name.trim() || creating || demo}
+                  onClick={() => void createGroup()}
+                >
+                  {creating ? "Creating…" : "Create first group"}
+                </Button>
+              </div>
+            }
+          />
+        </Card>
       ) : (
         <div className="bundle-studio-layout">
           <aside className="bundle-studio-list">
-            <Card loading={loading}>
-              <CardTitle
-                title="Groups"
-                subtitle={
-                  groups.length
-                    ? `${groups.length} group${groups.length === 1 ? "" : "s"}`
-                    : "No groups yet"
-                }
-              />
+            <div className="bundle-gallery">
+              {loading
+                ? Array.from({ length: 3 }).map((_, i) => (
+                    <Card key={i} loading className="bundle-card">
+                      <div className="bundle-card-top">
+                        <b>Loading…</b>
+                      </div>
+                    </Card>
+                  ))
+                : groups.map((g) => {
+                    const count = g.items?.length ?? 0;
+                    const risk = riskChip(g);
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        className={`bundle-card${selectedId === g.id ? " on" : ""}`}
+                        onClick={() => setSelectedId(g.id)}
+                      >
+                        <div className="bundle-card-top">
+                          <b>{g.name}</b>
+                          <span className={`chip ${risk.kind === "ok" ? "on" : risk.kind === "hot" ? "hot" : ""}`}>
+                            {risk.label}
+                          </span>
+                        </div>
+                        <div className="bundle-card-meta">
+                          {count} component{count === 1 ? "" : "s"}
+                          {g.openComponentCount
+                            ? ` · ${g.openComponentCount} open`
+                            : ""}
+                        </div>
+                      </button>
+                    );
+                  })}
+            </div>
 
+            <Card className="bundle-create-card">
+              <CardTitle title="New group" subtitle="Add another kit mapping" />
               <div className="bundle-create">
                 <div className="field">
-                  <label htmlFor="bg-name">New group name</label>
+                  <label htmlFor="bg-name">Name</label>
                   <input
                     id="bg-name"
                     value={name}
@@ -316,44 +416,11 @@ export default function BundlesPage() {
                   variant="primary"
                   disabled={!name.trim() || creating || demo}
                   onClick={() => void createGroup()}
+                  title={entitlement ? "Upgrade to Pro" : undefined}
                 >
                   {creating ? "Creating…" : "Create group"}
                 </Button>
               </div>
-
-              {!groups.length && !loading ? (
-                <EmptyState
-                  icon="bu"
-                  title="No bundle groups"
-                  description="Create a group for a kit or gift set, then add the products that make it up."
-                />
-              ) : (
-                <ul className="bundle-group-nav">
-                  {groups.map((g) => {
-                    const count = g.items?.length ?? 0;
-                    const hot =
-                      Boolean(g.hasOpenIncidents) || Boolean(g.hasRefillRisk);
-                    return (
-                      <li key={g.id}>
-                        <button
-                          type="button"
-                          className={`bundle-nav-item${selectedId === g.id ? " on" : ""}${hot ? " hot" : ""}`}
-                          onClick={() => setSelectedId(g.id)}
-                        >
-                          <span className="bn-name">{g.name}</span>
-                          <span className="bn-meta">
-                            {count} component{count === 1 ? "" : "s"}
-                            {g.openComponentCount
-                              ? ` · ${g.openComponentCount} open`
-                              : ""}
-                            {g.hasRefillRisk ? " · refill" : ""}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
             </Card>
           </aside>
 
@@ -363,133 +430,136 @@ export default function BundlesPage() {
                 <EmptyState
                   icon="bu"
                   title="Select a group"
-                  description="Choose a bundle group on the left, or create one to start mapping components."
+                  description="Choose a bundle card, or create one to start mapping components."
                 />
               </Card>
             ) : (
-              <Card>
-                <CardTitle
-                  title={selected.name}
-                  subtitle={selected.relationshipSource ?? "MANUAL"}
-                  action={
-                    <Button
-                      disabled={busyId === selected.id || demo}
-                      onClick={() => void deleteGroup(selected.id)}
-                    >
-                      Delete group
-                    </Button>
-                  }
-                />
-
-                <div className="field-row">
-                  <div className="field">
-                    <label htmlFor="edit-name">Name</label>
-                    <input
-                      id="edit-name"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      disabled={demo}
-                    />
-                  </div>
-                </div>
-                <div className="field">
-                  <label htmlFor="edit-notes">Notes</label>
-                  <textarea
-                    id="edit-notes"
-                    rows={2}
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    disabled={demo}
+              <Card className="bundle-detail-card">
+                <div className="bundle-detail-sticky">
+                  <CardTitle
+                    title={selected.name}
+                    subtitle={selected.relationshipSource ?? "MANUAL"}
+                    action={
+                      <div className="bundle-detail-actions">
+                        <Button
+                          variant="primary"
+                          disabled={!selectedId || busyId === "add"}
+                          onClick={() => setPickerOpen(true)}
+                        >
+                          Add products…
+                        </Button>
+                        <Button
+                          disabled={busyId === selected.id || demo}
+                          onClick={() => void deleteGroup(selected.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    }
                   />
                 </div>
-                <div className="form-actions">
-                  <Button
-                    variant="primary"
-                    disabled={savingMeta || !editName.trim() || demo}
-                    onClick={() => void saveMeta()}
-                  >
-                    {savingMeta ? "Saving…" : "Save details"}
-                  </Button>
-                </div>
 
-                <div className="ee-sec-title" style={{ marginTop: 8 }}>
-                  Components
-                </div>
-                <div className="chip-row pl in bundle-chips">
-                  {(selected.items ?? []).length ? (
-                    (selected.items ?? []).map((it) => {
-                      const summary =
-                        it.incidentSummary ?? it.inventoryItem?.incidentSummary;
-                      return (
-                        <div
-                          className={`bundle-chip${it.refillAtRisk ? " risk" : ""}`}
-                          key={it.id}
-                        >
-                          <div className="bc-top">
-                            <b>{itemLabel(it.inventoryItem)}</b>
-                            <button
-                              type="button"
-                              aria-label="Remove item"
-                              disabled={busyId === it.id || demo}
-                              onClick={() =>
-                                void removeItem(selected.id, it.id)
-                              }
-                            >
-                              ×
-                            </button>
-                          </div>
-                          <div className="bc-meta m">
-                            {it.role}
-                            {it.quantity != null ? ` · qty ${it.quantity}` : ""}
-                            {it.refillAtRisk
-                              ? ` · refill ≤ ${it.refillThreshold ?? 10}`
-                              : ""}
-                          </div>
-                          <IncidentSummaryBadge
-                            summary={summary}
-                            productId={it.inventoryItemId}
-                          />
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <EmptyState
-                      icon="bu"
-                      title="No components yet"
-                      description="Use Add products to attach inventory items to this group."
-                    />
-                  )}
-                </div>
-
-                <div className="ee-sec-title" style={{ marginTop: 18 }}>
-                  Add products
-                </div>
-                <div className="field-row">
-                  <div className="field">
-                    <label htmlFor="bg-role">Role for new items</label>
-                    <select
-                      id="bg-role"
-                      value={role}
-                      onChange={(e) =>
-                        setRole(e.target.value as (typeof ROLES)[number])
-                      }
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
+                <div className="bundle-detail-cols">
+                  <div>
+                    <div className="field-row">
+                      <div className="field">
+                        <label htmlFor="edit-name">Name</label>
+                        <input
+                          id="edit-name"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          disabled={demo}
+                        />
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="edit-notes">Notes</label>
+                      <textarea
+                        id="edit-notes"
+                        rows={3}
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        disabled={demo}
+                      />
+                    </div>
+                    <div className="form-actions">
+                      <Button
+                        variant="primary"
+                        disabled={savingMeta || !editName.trim() || demo}
+                        onClick={() => void saveMeta()}
+                      >
+                        {savingMeta ? "Saving…" : "Save details"}
+                      </Button>
+                    </div>
+                    <div className="field" style={{ marginTop: 12 }}>
+                      <label htmlFor="bg-role">Role for new items</label>
+                      <select
+                        id="bg-role"
+                        value={role}
+                        onChange={(e) =>
+                          setRole(e.target.value as (typeof ROLES)[number])
+                        }
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div className="form-actions">
-                  <Button
-                    variant="primary"
-                    disabled={!selectedId || busyId === "add"}
-                    onClick={() => setPickerOpen(true)}
-                  >
-                    Add products…
-                  </Button>
+
+                  <div>
+                    <div className="ee-sec-title">Components</div>
+                    <div className="chip-row pl in bundle-chips">
+                      {(selected.items ?? []).length ? (
+                        (selected.items ?? []).map((it) => {
+                          const summary =
+                            it.incidentSummary ??
+                            it.inventoryItem?.incidentSummary;
+                          return (
+                            <div
+                              className={`bundle-chip${it.refillAtRisk ? " risk" : ""}`}
+                              key={it.id}
+                            >
+                              <div className="bc-top">
+                                <b>{itemLabel(it.inventoryItem)}</b>
+                                <button
+                                  type="button"
+                                  aria-label="Remove item"
+                                  disabled={busyId === it.id || demo}
+                                  onClick={() =>
+                                    void removeItem(selected.id, it.id)
+                                  }
+                                >
+                                  ×
+                                </button>
+                              </div>
+                              <div className="bc-meta m">
+                                {it.role}
+                                {it.quantity != null
+                                  ? ` · qty ${it.quantity}`
+                                  : ""}
+                                {it.refillAtRisk
+                                  ? ` · refill ≤ ${it.refillThreshold ?? 10}`
+                                  : ""}
+                              </div>
+                              <IncidentSummaryBadge
+                                summary={summary}
+                                productId={it.inventoryItemId}
+                              />
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <EmptyState
+                          icon="bu"
+                          title="No components yet"
+                          description="Use Add products to attach inventory items to this group."
+                        />
+                      )}
+                    </div>
+                  </div>
                 </div>
               </Card>
             )}

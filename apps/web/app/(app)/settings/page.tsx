@@ -43,7 +43,12 @@ type PrefChannel = "IN_APP" | "EMAIL";
 
 type PrefState = Record<
   PrefChannel,
-  { enabled: boolean; minSeverity: string; destinationRef: string }
+  {
+    enabled: boolean;
+    minSeverity: string;
+    destinationRef: string;
+    digestEnabled: boolean;
+  }
 >;
 
 function num(v: unknown, fallback: number): number {
@@ -103,8 +108,18 @@ export default function SettingsPage() {
   });
   const [rules, setRules] = useState<DetectionRuleRow[]>([]);
   const [prefs, setPrefs] = useState<PrefState>({
-    IN_APP: { enabled: true, minSeverity: "MEDIUM", destinationRef: "" },
-    EMAIL: { enabled: false, minSeverity: "HIGH", destinationRef: "" },
+    IN_APP: {
+      enabled: true,
+      minSeverity: "MEDIUM",
+      destinationRef: "",
+      digestEnabled: false,
+    },
+    EMAIL: {
+      enabled: false,
+      minSeverity: "HIGH",
+      destinationRef: "",
+      digestEnabled: false,
+    },
   });
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplateRow[]>([]);
   const [activeTplKey, setActiveTplKey] = useState("INCIDENT_ALERT");
@@ -145,8 +160,18 @@ export default function SettingsPage() {
     );
     setOnboardingCompleted(Boolean(res.shop?.onboardingCompleted));
     const next: PrefState = {
-      IN_APP: { enabled: true, minSeverity: "MEDIUM", destinationRef: "" },
-      EMAIL: { enabled: false, minSeverity: "HIGH", destinationRef: "" },
+      IN_APP: {
+        enabled: true,
+        minSeverity: "MEDIUM",
+        destinationRef: "",
+        digestEnabled: false,
+      },
+      EMAIL: {
+        enabled: false,
+        minSeverity: "HIGH",
+        destinationRef: "",
+        digestEnabled: false,
+      },
     };
     for (const p of res.notificationPreferences ?? []) {
       if (p.channel === "IN_APP" || p.channel === "EMAIL") {
@@ -154,6 +179,7 @@ export default function SettingsPage() {
           enabled: Boolean(p.enabled),
           minSeverity: p.minSeverity || "MEDIUM",
           destinationRef: p.destinationRef ?? "",
+          digestEnabled: Boolean(p.digestEnabled),
         };
       }
     }
@@ -212,6 +238,7 @@ export default function SettingsPage() {
         channel,
         enabled: prefs[channel].enabled,
         minSeverity: prefs[channel].minSeverity,
+        digestEnabled: prefs[channel].digestEnabled,
         destinationRef:
           channel === "EMAIL"
             ? prefs.EMAIL.destinationRef.trim() || null
@@ -604,6 +631,22 @@ export default function SettingsPage() {
                   ) : null}
                 </div>
               ))}
+              <label className="field-check" style={{ marginBottom: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={prefs.EMAIL.digestEnabled}
+                  onChange={(e) =>
+                    setPrefs((p) => ({
+                      ...p,
+                      EMAIL: {
+                        ...p.EMAIL,
+                        digestEnabled: e.target.checked,
+                      },
+                    }))
+                  }
+                />
+                <span>Weekly email digest (open incidents summary)</span>
+              </label>
               <div className="form-actions">
                 <Button disabled={testBusy} onClick={() => void sendTestEmail()}>
                   {testBusy ? "Sending…" : "Send test email"}

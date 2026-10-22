@@ -11,11 +11,14 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import { BootLoader } from "./BootLoader";
+import { GlobalSearch } from "./GlobalSearch";
 import { IconSprite } from "./IconSprite";
 import { Sidebar, type SidebarBadges, type SidebarMeta } from "./Sidebar";
 import { ToastProvider } from "./Toast";
 import { TopBar } from "./TopBar";
 import { useReveal } from "../hooks/useReveal";
+import { apiRequest } from "../lib/api";
+import { useShop } from "../providers";
 
 interface ShellContextValue {
   setBadges: (b: SidebarBadges) => void;
@@ -48,12 +51,22 @@ interface AppShellProps {
 
 export function AppShell({ children, demo = false }: AppShellProps) {
   const pathname = usePathname();
+  const { shop, authenticated } = useShop();
   const [booted, setBooted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [badges, setBadges] = useState<SidebarBadges>({});
-  const [meta, setMeta] = useState<SidebarMeta>({});
+  const [badges, setBadgesState] = useState<SidebarBadges>({});
+  const [meta, setMetaState] = useState<SidebarMeta>({});
   const [cardLoading, setCardLoading] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const setBadges = useCallback((b: SidebarBadges) => {
+    setBadgesState((prev) => ({ ...prev, ...b }));
+  }, []);
+
+  const setMeta = useCallback((m: SidebarMeta) => {
+    setMetaState((prev) => ({ ...prev, ...m }));
+  }, []);
 
   // Restore collapse before paint to avoid sidebar animation flash
   useEffect(() => {
@@ -96,19 +109,74 @@ export function AppShell({ children, demo = false }: AppShellProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName ?? "";
+      const typing = /input|textarea|select/i.test(tag);
       if (
         e.key === "[" &&
         !mob() &&
-        !/input|textarea|select/i.test(
-          (e.target as HTMLElement)?.tagName ?? "",
-        )
+        !typing
       ) {
         toggleCollapse();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [toggleCollapse]);
+
+  const refreshNotificationBadge = useCallback(async () => {
+    if (demo || !authenticated || !booted) return;
+    try {
+      const res = await apiRequest<{ items?: Array<{ id: string }> }>(
+        "/api/v1/notifications?unread=1&limit=50",
+        { shop },
+      );
+      setBadges({ notifications: res.items?.length ?? 0 });
+    } catch {
+      /* keep prior badge */
+    }
+  }, [authenticated, booted, demo, setBadges, shop]);
+
+  useEffect(() => {
+    if (!booted || demo || !authenticated) return;
+    void refreshNotificationBadge();
+    const interval = window.setInterval(() => {
+      void refreshNotificationBadge();
+    }, 60_000);
+    const onFocus = () => void refreshNotificationBadge();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [authenticated, booted, demo, refreshNotificationBadge]);
+
+  useEffect(() => {
+    if (!booted || demo || !authenticated) return;
+    void (async () => {
+      try {
+        const bill = await apiRequest<{
+          planSlug?: string;
+          entitlements?: { isFree?: boolean; priceUsdMonthly?: number };
+        }>("/api/v1/billing/status", { shop }).catch(() =>
+          apiRequest<{
+            planSlug?: string;
+            entitlements?: { isFree?: boolean; priceUsdMonthly?: number };
+          }>("/api/v1/billing", { shop }),
+        );
+        const free =
+          bill.planSlug === "free" ||
+          bill.entitlements?.isFree === true ||
+          (bill.entitlements?.priceUsdMonthly ?? 1) <= 0;
+        setMeta({ showUpgradeCta: free });
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [authenticated, booted, demo, setMeta, shop]);
 
   useReveal(booted, null, [booted, pathname, cardLoading]);
 
@@ -120,7 +188,7 @@ export function AppShell({ children, demo = false }: AppShellProps) {
       cardLoading,
       ready: booted,
     }),
-    [cardLoading, booted],
+    [cardLoading, booted, setBadges, setMeta],
   );
 
   return (
@@ -148,9 +216,15 @@ export function AppShell({ children, demo = false }: AppShellProps) {
             demo={demo}
             hasNotifications={(badges.notifications ?? 0) > 0}
             onOpenMobile={() => setMobileOpen(true)}
+            onOpenSearch={() => setSearchOpen(true)}
           />
           {children}
         </main>
+        <GlobalSearch
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          demo={demo}
+        />
       </ShellContext.Provider>
     </ToastProvider>
   );

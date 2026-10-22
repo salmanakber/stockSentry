@@ -90,9 +90,23 @@ export async function apiRequest<T = unknown>(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(
-      text || `Request failed (${res.status})`,
-    );
+    let message = text || `Request failed (${res.status})`;
+    let code: string | undefined;
+    try {
+      const parsed = JSON.parse(text) as {
+        message?: string;
+        code?: string;
+        error?: string;
+      };
+      if (parsed.message) message = parsed.message;
+      code = parsed.code ?? (typeof parsed.error === "string" ? parsed.error : undefined);
+    } catch {
+      /* plain text */
+    }
+    const err = new Error(message) as Error & { code?: string; status?: number };
+    err.code = code;
+    err.status = res.status;
+    throw err;
   }
 
   if (res.status === 204) return undefined as T;

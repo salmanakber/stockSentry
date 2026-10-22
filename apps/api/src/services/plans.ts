@@ -22,6 +22,9 @@ function planRowToEntitlements(row: Plan): PlanEntitlements {
     advancedRules: row.advancedRules,
     exportsEnabled: row.exportsEnabled,
     teamWorkflows: row.teamWorkflows,
+    supplierAutomation: row.supplierAutomation,
+    maxBundleGroups: row.maxBundleGroups,
+    maxSuppliers: row.maxSuppliers,
     isFree: row.isFree,
     active: row.active,
     sortOrder: row.sortOrder,
@@ -53,7 +56,10 @@ export async function resolvePlan(slug: string): Promise<PlanEntitlements> {
   return getPlanEntitlements(slug || "free");
 }
 
-/** Ensure free/starter/pro/growth rows exist from static defaults (migrate/boot). */
+/**
+ * Ensure free/starter/pro/growth rows exist from static defaults (migrate/boot).
+ * Also fail-closed for INSTALLED shops that never recorded planChosenAt.
+ */
 export async function ensureDefaultPlans(): Promise<void> {
   const seeds = Object.values(PLAN_ENTITLEMENTS);
   for (const plan of seeds) {
@@ -69,6 +75,9 @@ export async function ensureDefaultPlans(): Promise<void> {
       advancedRules: plan.advancedRules,
       exportsEnabled: plan.exportsEnabled,
       teamWorkflows: plan.teamWorkflows,
+      supplierAutomation: plan.supplierAutomation,
+      maxBundleGroups: plan.maxBundleGroups,
+      maxSuppliers: plan.maxSuppliers,
       isFree: plan.isFree ?? plan.priceUsdMonthly <= 0,
       active: plan.active ?? true,
       sortOrder: plan.sortOrder ?? 0,
@@ -83,6 +92,21 @@ export async function ensureDefaultPlans(): Promise<void> {
     });
   }
   clearPlanEntitlementsCache();
+
+  // One-time gate repair: shops that skipped plan selection stay locked.
+  const repaired = await prisma.shop.updateMany({
+    where: {
+      installationStatus: "INSTALLED",
+      planChosenAt: null,
+      requiresPlanSelection: false,
+    },
+    data: { requiresPlanSelection: true },
+  });
+  if (repaired.count > 0) {
+    console.log(
+      `[plans] requiresPlanSelection=true for ${repaired.count} INSTALLED shop(s) with null planChosenAt`,
+    );
+  }
 }
 
 export async function listActivePlans(): Promise<PlanEntitlements[]> {
@@ -100,7 +124,7 @@ export async function findPlanBySlug(slug: string): Promise<Plan | null> {
   return prisma.plan.findUnique({ where: { slug } });
 }
 
-/** Sync planSlug + planId on Shop (compat). */
+/** Sync planSlug + planId on Shop (compat). Clears plan gate. */
 export async function assignShopPlan(input: {
   shopId: string;
   planSlug: string;
@@ -123,6 +147,7 @@ export async function assignShopPlan(input: {
       planId: plan?.id ?? null,
       planAssignedByAdmin: input.planAssignedByAdmin ?? false,
       requiresPlanSelection: false,
+      planChosenAt: new Date(),
       ...(input.billingStatus ? { billingStatus: input.billingStatus } : {}),
       ...(input.clearShopifySubscription
         ? { shopifySubscriptionGid: null }

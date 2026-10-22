@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma, type ObservationSource } from "@stocksentry/database";
 import { requireMerchant } from "../middleware/auth.js";
+import { historyWindowStart } from "../services/billing.js";
 
 export const historyRouter = Router();
 
@@ -19,24 +20,34 @@ historyRouter.get("/history", requireMerchant, async (req, res, next) => {
       typeof req.query.locationId === "string"
         ? req.query.locationId
         : undefined;
-    const from =
+    let from =
       typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
     const to =
       typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+
+    const { earliest, historyDays } = await historyWindowStart(shopId);
+    let clamped = false;
+    if (from && !Number.isNaN(from.getTime()) && from < earliest) {
+      from = earliest;
+      clamped = true;
+    }
+    // Always apply plan history floor so older rows are not returned.
+    const observedAtGte =
+      from && !Number.isNaN(from.getTime())
+        ? from > earliest
+          ? from
+          : earliest
+        : earliest;
 
     const where = {
       shopId,
       ...(source ? { source } : {}),
       ...(inventoryItemId ? { inventoryItemId } : {}),
       ...(locationId ? { locationId } : {}),
-      ...(from || to
-        ? {
-            observedAt: {
-              ...(from && !Number.isNaN(from.getTime()) ? { gte: from } : {}),
-              ...(to && !Number.isNaN(to.getTime()) ? { lte: to } : {}),
-            },
-          }
-        : {}),
+      observedAt: {
+        gte: observedAtGte,
+        ...(to && !Number.isNaN(to.getTime()) ? { lte: to } : {}),
+      },
     };
 
     const [total, items] = await Promise.all([
@@ -66,6 +77,9 @@ historyRouter.get("/history", requireMerchant, async (req, res, next) => {
       pageSize: PAGE_SIZE,
       total,
       totalPages: Math.ceil(total / PAGE_SIZE),
+      historyDays,
+      historyClamped: clamped,
+      historyEarliest: earliest.toISOString(),
     });
   } catch (err) {
     next(err);
@@ -78,8 +92,9 @@ historyRouter.get(
   async (req, res, next) => {
     try {
       const shopId = req.shopId!;
+      const { earliest } = await historyWindowStart(shopId);
       const rows = await prisma.inventoryObservation.findMany({
-        where: { shopId },
+        where: { shopId, observedAt: { gte: earliest } },
         orderBy: { observedAt: "desc" },
         take: 10000,
         include: {

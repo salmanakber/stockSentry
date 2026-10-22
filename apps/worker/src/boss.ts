@@ -5,7 +5,10 @@ import { runReconcile } from "../../api/src/services/reconcile.js";
 import { evaluateObservation } from "../../api/src/services/detection.js";
 import { generateAiReport } from "../../api/src/services/ai-report.js";
 import { generateProductReport } from "../../api/src/services/product-report.js";
-import { deliverNotification } from "../../api/src/services/notify.js";
+import {
+  deliverNotification,
+  enqueueWeeklyDigests,
+} from "../../api/src/services/notify.js";
 import { prisma } from "@stocksentry/database";
 
 export const QUEUE_NAMES = {
@@ -17,6 +20,7 @@ export const QUEUE_NAMES = {
   PRODUCT_REPORT: "product.report",
   NOTIFY_DELIVER: "notify.deliver",
   EXPORT_CSV: "export.csv",
+  DIGEST_CHECK: "notify.digest-check",
 } as const;
 
 /** @deprecated use QUEUE_NAMES */
@@ -145,6 +149,16 @@ export async function registerJobs(boss: PgBoss): Promise<void> {
       console.log(`[worker] export.csv`, job.id, data.exportJobId);
     }
   });
+
+  await boss.work(QUEUE_NAMES.DIGEST_CHECK, async (jobs) => {
+    for (const job of jobs) {
+      const result = await enqueueWeeklyDigests();
+      console.log(`[worker] notify.digest-check`, job.id, result);
+    }
+  });
+
+  // Daily stub — enqueue digest check for shops with digestEnabled.
+  await boss.schedule(QUEUE_NAMES.DIGEST_CHECK, "0 14 * * *", {});
 }
 
 async function runExportJob(exportJobId: string, shopId: string) {

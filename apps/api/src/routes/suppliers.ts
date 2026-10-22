@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { prisma } from "@stocksentry/database";
 import { requireMerchant } from "../middleware/auth.js";
+import {
+  EntitlementError,
+  assertSupplierCapacity,
+} from "../services/billing.js";
 
 export const suppliersRouter = Router();
 
@@ -91,6 +95,8 @@ suppliersRouter.post("/suppliers", requireMerchant, async (req, res, next) => {
       return;
     }
 
+    await assertSupplierCapacity(shopId, 1);
+
     const supplier = await prisma.supplier.create({
       data: {
         shopId,
@@ -106,6 +112,14 @@ suppliersRouter.post("/suppliers", requireMerchant, async (req, res, next) => {
 
     res.status(201).json(supplier);
   } catch (err) {
+    if (err instanceof EntitlementError) {
+      res.status(403).json({
+        error: err.code.toLowerCase(),
+        code: err.code,
+        message: err.message,
+      });
+      return;
+    }
     next(err);
   }
 });

@@ -22,6 +22,7 @@ export const shopRepository = {
                 planId: null,
                 planAssignedByAdmin: false,
                 requiresPlanSelection: true,
+                planChosenAt: null,
                 billingStatus: "NONE",
                 shopifySubscriptionGid: null,
               }
@@ -39,6 +40,7 @@ export const shopRepository = {
         billingStatus: "NONE",
         // Merchant must choose Free or paid before using the app.
         requiresPlanSelection: true,
+        planChosenAt: null,
       },
     });
   },
@@ -49,6 +51,8 @@ export const shopRepository = {
       data: {
         installationStatus: "UNINSTALLED",
         uninstalledAt: new Date(),
+        requiresPlanSelection: true,
+        planChosenAt: null,
       },
     });
   },

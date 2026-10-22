@@ -19,6 +19,10 @@ export type PlanEntitlements = {
   advancedRules: boolean;
   exportsEnabled: boolean;
   teamWorkflows: boolean;
+  /** Auto-email / replenishment automation for suppliers. */
+  supplierAutomation: boolean;
+  maxBundleGroups: number;
+  maxSuppliers: number;
   isFree?: boolean;
   active?: boolean;
   sortOrder?: number;
@@ -32,7 +36,20 @@ export const ENTITLEMENT_ERROR_CODES = {
   MONITORED_ITEMS_EXCEEDED: "ENTITLEMENT_MONITORED_ITEMS_EXCEEDED",
   EXPORTS_NOT_ENABLED: "ENTITLEMENT_EXPORTS_NOT_ENABLED",
   INVALID_PLAN: "ENTITLEMENT_INVALID_PLAN",
+  BUNDLE_GROUPS_EXCEEDED: "ENTITLEMENT_BUNDLE_GROUPS_EXCEEDED",
+  SUPPLIERS_EXCEEDED: "ENTITLEMENT_SUPPLIERS_EXCEEDED",
+  SUPPLIER_AUTOMATION_REQUIRED: "ENTITLEMENT_SUPPLIER_AUTOMATION_REQUIRED",
+  ADVANCED_RULES_REQUIRED: "ENTITLEMENT_ADVANCED_RULES_REQUIRED",
+  HISTORY_RANGE_EXCEEDED: "ENTITLEMENT_HISTORY_RANGE_EXCEEDED",
 } as const;
+
+/** Rule types that require `advancedRules` entitlement to enable. */
+export const ADVANCED_RULE_TYPES = [
+  "REPEATED_CHANGES",
+  "STALE_MONITORING",
+  "BUNDLE_COMPONENT_RISK",
+  "CUSTOM_THRESHOLD",
+] as const;
 
 export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
   free: {
@@ -49,6 +66,9 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
     advancedRules: false,
     exportsEnabled: false,
     teamWorkflows: false,
+    supplierAutomation: false,
+    maxBundleGroups: 2,
+    maxSuppliers: 1,
     isFree: true,
     active: true,
     sortOrder: 0,
@@ -67,6 +87,9 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
     advancedRules: false,
     exportsEnabled: true,
     teamWorkflows: false,
+    supplierAutomation: false,
+    maxBundleGroups: 10,
+    maxSuppliers: 5,
     isFree: false,
     active: true,
     sortOrder: 1,
@@ -85,6 +108,9 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
     advancedRules: true,
     exportsEnabled: true,
     teamWorkflows: true,
+    supplierAutomation: true,
+    maxBundleGroups: 50,
+    maxSuppliers: 25,
     isFree: false,
     active: true,
     sortOrder: 2,
@@ -103,6 +129,9 @@ export const PLAN_ENTITLEMENTS: Record<PlanSlug, PlanEntitlements> = {
     advancedRules: true,
     exportsEnabled: true,
     teamWorkflows: true,
+    supplierAutomation: true,
+    maxBundleGroups: 500,
+    maxSuppliers: 200,
     isFree: false,
     active: true,
     sortOrder: 3,

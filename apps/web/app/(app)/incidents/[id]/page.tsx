@@ -152,6 +152,30 @@ export default function IncidentDetailPage() {
     }
   };
 
+  const copySummary = async () => {
+    if (!data) return;
+    const lines = [
+      `StockSentry incident summary`,
+      `ID: ${data.id}`,
+      `Title: ${data.title}`,
+      data.subtitle ? `Detail: ${data.subtitle}` : null,
+      `Severity: ${data.severityLabel ?? severityLabel(data.severity)}`,
+      `Status: ${statusLabel(data.status)}`,
+      `Detected: ${data.detectedAt}`,
+      `Quantity: ${data.quantity}${data.quantityDelta ? ` (${data.quantityDelta})` : ""}`,
+      `Rule: ${data.rule}${data.ruleDetail ? ` (${data.ruleDetail})` : ""}`,
+      data.source ? `Source: ${data.source}` : null,
+      "",
+      "StockSentry is read-only and does not change Shopify inventory.",
+    ].filter((x): x is string => Boolean(x));
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      showToast("Summary copied to clipboard");
+    } catch {
+      showToast("Could not copy summary");
+    }
+  };
+
   const report = data?.aiReport;
 
   return (
@@ -168,9 +192,16 @@ export default function IncidentDetailPage() {
           )
         }
         actions={
-          <Link href="/incidents" className="btn">
-            Back to incidents
-          </Link>
+          <>
+            {data ? (
+              <Button onClick={() => void copySummary()}>
+                Copy summary
+              </Button>
+            ) : null}
+            <Link href="/incidents" className="btn">
+              Back to incidents
+            </Link>
+          </>
         }
       />
 

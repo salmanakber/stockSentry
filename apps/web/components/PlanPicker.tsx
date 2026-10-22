@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { Button } from "./Button";
 import { apiRequest } from "../lib/api";
 import type { BillingStatusResponse, MerchantPlan } from "../lib/types";
@@ -29,15 +28,22 @@ function planFeatureBullets(plan: MerchantPlan): string[] {
 
 interface PlanPickerProps {
   onSelected: () => void;
+  gateError?: string | null;
+  onRetry?: () => void;
 }
 
-export function PlanPicker({ onSelected }: PlanPickerProps) {
+export function PlanPicker({
+  onSelected,
+  gateError = null,
+  onRetry,
+}: PlanPickerProps) {
   const { shop } = useShop();
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<MerchantPlan[]>([]);
   const [billing, setBilling] = useState<BillingStatusResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,12 +148,17 @@ export function PlanPicker({ onSelected }: PlanPickerProps) {
           Before you can use StockSentry, pick Free or a paid plan. You can
           change this later in Billing.
         </p>
-        {error ? (
+        {gateError || error ? (
           <div className="banner" role="alert">
             <div>
               <strong>Something went wrong</strong>
-              {error}
+              {gateError || error}
             </div>
+            {gateError && onRetry ? (
+              <div className="form-actions" style={{ marginTop: 10 }}>
+                <Button onClick={onRetry}>Retry</Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {loading ? (
@@ -214,10 +225,29 @@ export function PlanPicker({ onSelected }: PlanPickerProps) {
             Current local plan before selection: {billing.planSlug}
           </p>
         ) : null}
+        {showHelp ? (
+          <div className="plan-gate-help">
+            <p>
+              StockSentry monitors inventory changes and never writes Shopify
+              quantities. Choose Free to explore with limits, or a paid plan for
+              exports, deeper history, and automation. You can change plans later
+              from Billing after selection.
+            </p>
+            <p className="m">
+              Need support? Email{" "}
+              <a href="mailto:support@stocksentry.app">support@stocksentry.app</a>
+              .
+            </p>
+          </div>
+        ) : null}
         <p className="plan-gate-links">
-          <Link href="/help">Help</Link>
-          {" · "}
-          <Link href="/billing">Billing details</Link>
+          <button
+            type="button"
+            className="linkish"
+            onClick={() => setShowHelp((v) => !v)}
+          >
+            {showHelp ? "Hide help" : "Help"}
+          </button>
         </p>
       </div>
     </div>
