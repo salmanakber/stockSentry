@@ -16,9 +16,43 @@ import { IconSprite } from "./IconSprite";
 import { Sidebar, type SidebarBadges, type SidebarMeta } from "./Sidebar";
 import { ToastProvider } from "./Toast";
 import { TopBar } from "./TopBar";
+import {
+  UpgradeFeatureModal,
+  type UpgradeFeatureInfo,
+} from "./UpgradeFeatureModal";
 import { useReveal } from "../hooks/useReveal";
 import { apiRequest } from "../lib/api";
+import type { BillingStatusResponse } from "../lib/types";
 import { useShop } from "../providers";
+
+function buildLockedFeatures(
+  entitlements: BillingStatusResponse["entitlements"] | undefined,
+): Record<string, UpgradeFeatureInfo> {
+  const locked: Record<string, UpgradeFeatureInfo> = {};
+  if (!entitlements) return locked;
+
+  if (entitlements.exportsEnabled === false) {
+    locked["/exports"] = {
+      href: "/exports",
+      label: "Reports / Exports",
+      title: "Exports are on a paid plan",
+      body: "CSV reports and scheduled exports help you share inventory risk with your team. Upgrade to Starter or Pro to generate and download them.",
+      requiredPlan: "Starter",
+    };
+  }
+
+  if (entitlements.supplierAutomation === false) {
+    locked["/replenishment"] = {
+      href: "/replenishment",
+      label: "Replenishment",
+      title: "Supplier automation needs Pro",
+      body: "Draft purchase orders, email suppliers, and track replenishment from low-stock signals. This workflow unlocks on the Pro plan.",
+      requiredPlan: "Pro",
+    };
+  }
+
+  return locked;
+}
 
 interface ShellContextValue {
   setBadges: (b: SidebarBadges) => void;
@@ -59,6 +93,11 @@ export function AppShell({ children, demo = false }: AppShellProps) {
   const [meta, setMetaState] = useState<SidebarMeta>({});
   const [cardLoading, setCardLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [lockedFeatures, setLockedFeatures] = useState<
+    Record<string, UpgradeFeatureInfo>
+  >({});
+  const [upgradePrompt, setUpgradePrompt] =
+    useState<UpgradeFeatureInfo | null>(null);
 
   const setBadges = useCallback((b: SidebarBadges) => {
     setBadgesState((prev) => ({ ...prev, ...b }));
@@ -158,20 +197,17 @@ export function AppShell({ children, demo = false }: AppShellProps) {
     if (!booted || demo || !authenticated) return;
     void (async () => {
       try {
-        const bill = await apiRequest<{
-          planSlug?: string;
-          entitlements?: { isFree?: boolean; priceUsdMonthly?: number };
-        }>("/api/v1/billing/status", { shop }).catch(() =>
-          apiRequest<{
-            planSlug?: string;
-            entitlements?: { isFree?: boolean; priceUsdMonthly?: number };
-          }>("/api/v1/billing", { shop }),
+        const bill = await apiRequest<BillingStatusResponse>(
+          "/api/v1/billing/status",
+          { shop },
+        ).catch(() =>
+          apiRequest<BillingStatusResponse>("/api/v1/billing", { shop }),
         );
         const free =
           bill.planSlug === "free" ||
-          bill.entitlements?.isFree === true ||
           (bill.entitlements?.priceUsdMonthly ?? 1) <= 0;
         setMeta({ showUpgradeCta: free });
+        setLockedFeatures(buildLockedFeatures(bill.entitlements));
       } catch {
         /* ignore */
       }
@@ -210,6 +246,8 @@ export function AppShell({ children, demo = false }: AppShellProps) {
           onCloseMobile={() => setMobileOpen(false)}
           badges={badges}
           meta={meta}
+          lockedFeatures={lockedFeatures}
+          onLockedNav={setUpgradePrompt}
         />
         <main>
           <TopBar
@@ -224,6 +262,10 @@ export function AppShell({ children, demo = false }: AppShellProps) {
           open={searchOpen}
           onClose={() => setSearchOpen(false)}
           demo={demo}
+        />
+        <UpgradeFeatureModal
+          feature={upgradePrompt}
+          onClose={() => setUpgradePrompt(null)}
         />
       </ShellContext.Provider>
     </ToastProvider>

@@ -6,7 +6,7 @@ import { Icon } from "./IconSprite";
 interface TopBarProps {
   demo?: boolean;
   hasNotifications?: boolean;
-  onOpenMobile: () => void;
+  onOpenMobile?: () => void;
   onOpenSearch?: () => void;
 }
 
@@ -26,9 +26,6 @@ export function TopBar({
       >
         <Icon id="mn" />
       </button>
-      <Link href="/overview" className="top-brand" aria-label="StockSentry">
-        <img src="/images/logo.png" alt="StockSentry" />
-      </Link>
       <button
         type="button"
         className="sr"

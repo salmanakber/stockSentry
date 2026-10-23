@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { Icon } from "./IconSprite";
+import type { UpgradeFeatureInfo } from "./UpgradeFeatureModal";
 
 export interface SidebarBadges {
   incidents?: number;
@@ -90,6 +91,9 @@ interface SidebarProps {
   onCloseMobile: () => void;
   badges?: SidebarBadges;
   meta?: SidebarMeta;
+  /** Plan-locked nav items keyed by href. */
+  lockedFeatures?: Record<string, UpgradeFeatureInfo>;
+  onLockedNav?: (feature: UpgradeFeatureInfo) => void;
 }
 
 export function Sidebar({
@@ -98,6 +102,8 @@ export function Sidebar({
   onCloseMobile,
   badges = {},
   meta = {},
+  lockedFeatures = {},
+  onLockedNav,
 }: SidebarProps) {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
@@ -154,15 +160,11 @@ export function Sidebar({
         <Icon id="cl" />
       </button>
       <div className="br">
-        <div className="mk">
+        <div className="mk mk-logo">
           <img src="/images/logo-icon.png" alt="" />
         </div>
         <div className="lb">
-          <img
-            src="/images/logo.png"
-            alt="StockSentry"
-            className="brand-logo"
-          />
+          <b>StockSentry</b>
           <small>Inventory monitoring</small>
         </div>
       </div>
@@ -186,11 +188,12 @@ export function Sidebar({
               const active = isActive(pathname, item.href);
               const badge =
                 item.badgeKey != null ? badges[item.badgeKey] : undefined;
+              const locked = lockedFeatures[item.href];
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`ni${active ? " on" : ""}`}
+                  className={`ni${active ? " on" : ""}${locked ? " locked" : ""}`}
                   data-t={item.label}
                   style={{ animationDelay: `${k * 55 + 200}ms` }}
                   onMouseEnter={(e) => {
@@ -198,6 +201,7 @@ export function Sidebar({
                     if (hlRef.current) hlRef.current.style.opacity = "1";
                   }}
                   onClick={() => {
+                    if (locked) onLockedNav?.(locked);
                     if (mob()) onCloseMobile();
                   }}
                 >
@@ -205,7 +209,11 @@ export function Sidebar({
                   <span className="lb" style={{ ["--i" as string]: k }}>
                     {item.label}
                   </span>
-                  {badge != null && badge > 0 ? (
+                  {locked ? (
+                    <span className="up-chip" title="Upgrade to unlock">
+                      Upgrade
+                    </span>
+                  ) : badge != null && badge > 0 ? (
                     <b className={`bd${item.quiet ? " q" : ""}`}>{badge}</b>
                   ) : null}
                 </Link>
@@ -235,9 +243,13 @@ export function Sidebar({
           <div className="side-upgrade">
             <b>Unlock more capacity</b>
             <span>Exports, deeper history, and supplier automation on Pro.</span>
-            <Link href="/billing" className="btn primary" onClick={() => {
-              if (mob()) onCloseMobile();
-            }}>
+            <Link
+              href="/billing"
+              className="btn primary"
+              onClick={() => {
+                if (mob()) onCloseMobile();
+              }}
+            >
               Upgrade
             </Link>
           </div>
