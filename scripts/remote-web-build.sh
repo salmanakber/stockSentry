@@ -1,5 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /var/www/stockSentry/apps/web
-export NODE_ENV=production
-exec ../../node_modules/.bin/next build
+exec "$(cd "$(dirname "$0")" && pwd)/next-build-with-root-env.sh"

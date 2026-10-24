@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p ${WEB_PORT:-3000}",
-    "build": "next build",
+    "build": "bash ../../scripts/next-build-with-root-env.sh",
     "start": "next start -p ${PORT:-3000}",
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit"
