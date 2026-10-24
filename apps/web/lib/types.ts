@@ -436,6 +436,7 @@ export interface BundleGroupItem {
     productTitle?: string | null;
     variantTitle?: string | null;
     sku?: string | null;
+    imageUrl?: string | null;
     incidentSummary?: IncidentSummary;
   };
 }
