@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Icon } from "../IconSprite";
+import { ProductThumb } from "../ProductThumb";
 import {
   isDeltaNegative,
   severityClass,
@@ -59,21 +60,24 @@ export function IncidentTable({
                 }}
               >
                 <span className={`sev ${sev}`}>{sevText}</span>
-                <div>
-                  <b>
-                    {linkTitles ? (
-                      <Link
-                        href={`/incidents/${encodeURIComponent(r.id)}`}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ color: "inherit", textDecoration: "none" }}
-                      >
-                        {r.title}
-                      </Link>
-                    ) : (
-                      r.title
-                    )}
-                  </b>
-                  <span className="m mono">{r.subtitle}</span>
+                <div className="inv-prod">
+                  <ProductThumb src={r.imageUrl} label={r.title} size="sm" />
+                  <div className="inv-prod-meta">
+                    <b>
+                      {linkTitles ? (
+                        <Link
+                          href={`/incidents/${encodeURIComponent(r.id)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ color: "inherit", textDecoration: "none" }}
+                        >
+                          {r.title}
+                        </Link>
+                      ) : (
+                        r.title
+                      )}
+                    </b>
+                    <span className="m mono">{r.subtitle}</span>
+                  </div>
                 </div>
                 <div className="q">
                   {r.quantity}

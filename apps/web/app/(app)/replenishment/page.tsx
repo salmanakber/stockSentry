@@ -10,6 +10,7 @@ import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { PageHeader } from "../../../components/shared/PageHeader";
 import { PlanLockBadge } from "../../../components/PlanLockBadge";
+import { ProductThumb } from "../../../components/ProductThumb";
 import { ProductPickerModal } from "../../../components/ProductPickerModal";
 import { apiRequest } from "../../../lib/api";
 import type {
@@ -426,7 +427,15 @@ export default function ReplenishmentPage() {
               ) : (
                 rules.map((rule) => (
                   <div className="list-row" key={rule.id}>
-                    <div>
+                    <div className="inv-prod" style={{ flex: 1, minWidth: 0 }}>
+                      {rule.inventoryItem ? (
+                        <ProductThumb
+                          src={rule.inventoryItem.imageUrl}
+                          label={ruleTargetLabel(rule)}
+                          size="sm"
+                        />
+                      ) : null}
+                      <div className="inv-prod-meta">
                       <b>{ruleTargetLabel(rule)}</b>
                       <div className="m">
                         {rule.supplier?.name ?? "Supplier"} · threshold{" "}
@@ -449,6 +458,7 @@ export default function ReplenishmentPage() {
                         ) : (
                           <span className="chip hot">Unverified</span>
                         )}
+                      </div>
                       </div>
                     </div>
                     <Button
@@ -478,7 +488,15 @@ export default function ReplenishmentPage() {
               ) : (
                 requests.map((req) => (
                   <div className="list-row" key={req.id}>
-                    <div>
+                    <div className="inv-prod" style={{ flex: 1, minWidth: 0 }}>
+                      {req.inventoryItem ? (
+                        <ProductThumb
+                          src={req.inventoryItem.imageUrl}
+                          label={requestTargetLabel(req)}
+                          size="sm"
+                        />
+                      ) : null}
+                      <div className="inv-prod-meta">
                       <b>{requestTargetLabel(req)}</b>
                       <div className="m">
                         {req.supplier?.name ?? "Supplier"} · qty {req.quantity}{" "}
@@ -491,6 +509,7 @@ export default function ReplenishmentPage() {
                         {req.errorCode ? (
                           <span className="chip hot">{req.errorCode}</span>
                         ) : null}
+                      </div>
                       </div>
                     </div>
                     <div className="form-actions" style={{ margin: 0 }}>

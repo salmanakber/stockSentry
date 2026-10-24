@@ -10,6 +10,8 @@ import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { IncidentSummaryBadge } from "../../../components/IncidentBadge";
+import { ProductQuickView } from "../../../components/ProductQuickView";
+import { ProductThumb } from "../../../components/ProductThumb";
 import { apiRequest } from "../../../lib/api";
 import {
   DEMO_PRODUCTS_STATS,
@@ -45,16 +47,6 @@ function formatWhen(iso?: string | null): string {
   }
 }
 
-function severityFromSummary(
-  summary?: ProductItem["incidentSummary"],
-): "high" | "med" | "low" | null {
-  if (!summary?.openCount) return null;
-  const s = (summary.highestSeverity ?? "").toUpperCase();
-  if (s === "CRITICAL" || s === "HIGH") return "high";
-  if (s === "MEDIUM") return "med";
-  return "low";
-}
-
 export default function ProductsPage() {
   const { shop } = useShop();
   const { ready, setCardLoading } = useShell();
@@ -78,6 +70,7 @@ export default function ProductsPage() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [syncBusy, setSyncBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quickView, setQuickView] = useState<ProductItem | null>(null);
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -360,51 +353,52 @@ export default function ProductsPage() {
                 <table className="inv-data">
                   <thead>
                     <tr>
-                      <th>Severity</th>
                       <th>Product</th>
-                      <th>SKU</th>
                       <th>Qty</th>
                       <th>Location</th>
-                      <th>Last observed</th>
-                      <th>Incidents</th>
+                      <th>Alerts</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => {
                       const last = item.observations?.[0];
-                      const sev = severityFromSummary(item.incidentSummary);
+                      const title = productTitle(item);
                       return (
-                        <tr key={item.id} className="inv-row">
+                        <tr
+                          key={item.id}
+                          className="inv-row"
+                          tabIndex={0}
+                          onClick={() => setQuickView(item)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setQuickView(item);
+                            }
+                          }}
+                        >
                           <td>
-                            {sev ? (
-                              <span className={`sev ${sev}`}>
-                                {sev === "high"
-                                  ? "High"
-                                  : sev === "med"
-                                    ? "Med"
-                                    : "Low"}
-                              </span>
-                            ) : (
-                              <span className="inv-sev-none">—</span>
-                            )}
-                          </td>
-                          <td>
-                            <Link
-                              href={`/products/${encodeURIComponent(item.id)}${demoQs}`}
-                              className="inv-name"
-                            >
-                              {productTitle(item)}
-                            </Link>
-                          </td>
-                          <td className="mono inv-sku">
-                            {item.sku?.trim() ? item.sku : "—"}
+                            <div className="inv-prod">
+                              <ProductThumb
+                                src={item.imageUrl}
+                                label={title}
+                                size="md"
+                              />
+                              <div className="inv-prod-meta">
+                                <b>{title}</b>
+                                <span className="mono inv-sku">
+                                  {item.sku?.trim() ? item.sku : "No SKU"}
+                                </span>
+                              </div>
+                            </div>
                           </td>
                           <td className="mono">
                             {last?.quantity != null ? last.quantity : "—"}
                           </td>
                           <td>{last?.location?.name ?? "—"}</td>
-                          <td className="m">{formatWhen(last?.observedAt)}</td>
-                          <td>
+                          <td
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
                             <IncidentSummaryBadge
                               summary={item.incidentSummary}
                               productId={item.id}
@@ -477,6 +471,12 @@ export default function ProductsPage() {
           </p>
         </Card>
       </div>
+
+      <ProductQuickView
+        item={quickView}
+        demo={demo}
+        onClose={() => setQuickView(null)}
+      />
     </div>
   );
 }

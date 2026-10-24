@@ -210,6 +210,7 @@ export default function HistoryPage() {
                           <div className="hist-prod">
                             <div className="hist-thumb">
                               {row.inventoryItem?.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={row.inventoryItem.imageUrl}
                                   alt=""

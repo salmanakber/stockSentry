@@ -65,6 +65,7 @@ export interface IncidentRow {
   detectedAt: string;
   evidence?: IncidentEvidence;
   inventoryItemId?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface ReviewOutcomes {
@@ -216,6 +217,7 @@ export interface ProductItem {
   productTitle?: string | null;
   variantTitle?: string | null;
   sku?: string | null;
+  imageUrl?: string | null;
   tracked?: boolean;
   incidentSummary?: IncidentSummary;
   observations?: Array<{

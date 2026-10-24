@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./IconSprite";
+import { ProductThumb } from "./ProductThumb";
 import { apiRequest } from "../lib/api";
 import type { ProductItem, ProductsListResponse } from "../lib/types";
 import { useShop } from "../providers";
@@ -187,13 +188,21 @@ export function GlobalSearch({ open, onClose, demo = false }: GlobalSearchProps)
                       <li key={p.id}>
                         <button
                           type="button"
+                          className="gs-prod"
                           onClick={() =>
                             go(`/products/${encodeURIComponent(p.id)}`)
                           }
                         >
-                          <span className="gs-title">{productLabel(p)}</span>
-                          <span className="gs-meta mono">
-                            {p.sku?.trim() || "No SKU"}
+                          <ProductThumb
+                            src={p.imageUrl}
+                            label={productLabel(p)}
+                            size="sm"
+                          />
+                          <span className="gs-prod-copy">
+                            <span className="gs-title">{productLabel(p)}</span>
+                            <span className="gs-meta mono">
+                              {p.sku?.trim() || "No SKU"}
+                            </span>
                           </span>
                         </button>
                       </li>

@@ -72,7 +72,7 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
         take: 6,
         include: {
           inventoryItem: {
-            select: { productTitle: true, variantTitle: true, sku: true },
+            select: { productTitle: true, variantTitle: true, sku: true, imageUrl: true },
           },
           location: { select: { name: true } },
         },
@@ -158,6 +158,7 @@ overviewRouter.get("/overview", requireMerchant, async (req, res, next) => {
               productTitle: true,
               variantTitle: true,
               sku: true,
+              imageUrl: true,
             },
           });
 

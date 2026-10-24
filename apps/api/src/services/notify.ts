@@ -369,6 +369,7 @@ export async function listNotifications(
               productTitle: true,
               variantTitle: true,
               sku: true,
+              imageUrl: true,
             },
           },
         },

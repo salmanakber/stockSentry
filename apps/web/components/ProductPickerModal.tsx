@@ -10,6 +10,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { Button } from "./Button";
 import { IncidentSummaryBadge } from "./IncidentBadge";
+import { ProductThumb } from "./ProductThumb";
 import { EmptyState } from "./shared/EmptyState";
 import { apiRequest } from "../lib/api";
 import { DEMO_PRODUCTS } from "../lib/demo-data";
@@ -312,6 +313,11 @@ export function ProductPickerModal({
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggle(item)}
+                      />
+                      <ProductThumb
+                        src={item.imageUrl}
+                        label={productLabel(item)}
+                        size="sm"
                       />
                       <div className="ppm-row-main">
                         <b>{productLabel(item)}</b>

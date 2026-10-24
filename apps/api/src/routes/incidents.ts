@@ -56,6 +56,7 @@ incidentsRouter.get("/incidents", requireMerchant, async (req, res, next) => {
               productTitle: true,
               variantTitle: true,
               sku: true,
+              imageUrl: true,
             },
           },
           location: { select: { id: true, name: true } },
@@ -92,7 +93,7 @@ incidentsRouter.get(
         take: 5000,
         include: {
           inventoryItem: {
-            select: { productTitle: true, variantTitle: true, sku: true },
+            select: { productTitle: true, variantTitle: true, sku: true, imageUrl: true },
           },
           location: { select: { name: true } },
         },

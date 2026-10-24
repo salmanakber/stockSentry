@@ -122,7 +122,7 @@ historyRouter.get(
         take: 10000,
         include: {
           inventoryItem: {
-            select: { productTitle: true, variantTitle: true, sku: true },
+            select: { productTitle: true, variantTitle: true, sku: true, imageUrl: true },
           },
           location: { select: { name: true } },
         },

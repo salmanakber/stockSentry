@@ -9,6 +9,7 @@ import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import { IncidentSummaryBadge } from "../../../components/IncidentBadge";
 import { ProductPickerModal } from "../../../components/ProductPickerModal";
+import { ProductThumb } from "../../../components/ProductThumb";
 import { PlanLockBadge } from "../../../components/PlanLockBadge";
 import { UpgradeBanner } from "../../../components/UpgradeBanner";
 import { apiRequest } from "../../../lib/api";
@@ -534,43 +535,52 @@ export default function BundlesPage() {
 
                   <div>
                     <div className="ee-sec-title">Components</div>
-                    <div className="chip-row pl in bundle-chips">
+                    <div className="bundle-comps">
                       {(selected.items ?? []).length ? (
                         (selected.items ?? []).map((it) => {
                           const summary =
                             it.incidentSummary ??
                             it.inventoryItem?.incidentSummary;
+                          const label = itemLabel(it.inventoryItem);
                           return (
                             <div
-                              className={`bundle-chip${it.refillAtRisk ? " risk" : ""}`}
+                              className={`bundle-comp${it.refillAtRisk ? " risk" : ""}`}
                               key={it.id}
                             >
-                              <div className="bc-top">
-                                <b>{itemLabel(it.inventoryItem)}</b>
-                                <button
-                                  type="button"
-                                  aria-label="Remove item"
-                                  disabled={busyId === it.id || demo}
-                                  onClick={() =>
-                                    void removeItem(selected.id, it.id)
-                                  }
-                                >
-                                  ×
-                                </button>
-                              </div>
-                              <div className="bc-meta m">
-                                {it.role}
-                                {it.quantity != null
-                                  ? ` · qty ${it.quantity}`
-                                  : ""}
-                                {it.refillAtRisk
-                                  ? ` · refill ≤ ${it.refillThreshold ?? 10}`
-                                  : ""}
-                              </div>
-                              <IncidentSummaryBadge
-                                summary={summary}
-                                productId={it.inventoryItemId}
+                              <ProductThumb
+                                src={it.inventoryItem?.imageUrl}
+                                label={label}
+                                size="md"
                               />
+                              <div className="bundle-comp-body">
+                                <b title={label}>{label}</b>
+                                <div className="bundle-comp-meta">
+                                  <span className="role">{it.role}</span>
+                                  {it.quantity != null ? (
+                                    <span className="qty">qty {it.quantity}</span>
+                                  ) : null}
+                                  {it.refillAtRisk ? (
+                                    <span className="qty">
+                                      refill ≤ {it.refillThreshold ?? 10}
+                                    </span>
+                                  ) : null}
+                                  <IncidentSummaryBadge
+                                    summary={summary}
+                                    productId={it.inventoryItemId}
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="bundle-comp-x"
+                                aria-label="Remove item"
+                                disabled={busyId === it.id || demo}
+                                onClick={() =>
+                                  void removeItem(selected.id, it.id)
+                                }
+                              >
+                                ×
+                              </button>
                             </div>
                           );
                         })

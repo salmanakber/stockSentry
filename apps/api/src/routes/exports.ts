@@ -136,7 +136,7 @@ exportsRouter.get(
           take: 10_000,
           include: {
             inventoryItem: {
-              select: { productTitle: true, variantTitle: true, sku: true },
+              select: { productTitle: true, variantTitle: true, sku: true, imageUrl: true },
             },
             location: { select: { name: true } },
           },
@@ -171,7 +171,7 @@ exportsRouter.get(
           take: 10_000,
           include: {
             inventoryItem: {
-              select: { productTitle: true, variantTitle: true, sku: true },
+              select: { productTitle: true, variantTitle: true, sku: true, imageUrl: true },
             },
             location: { select: { name: true } },
           },

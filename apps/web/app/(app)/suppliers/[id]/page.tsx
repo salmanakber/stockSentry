@@ -10,6 +10,7 @@ import { useToast } from "../../../../components/Toast";
 import { EmptyState } from "../../../../components/shared/EmptyState";
 import { PageHeader } from "../../../../components/shared/PageHeader";
 import { ProductPickerModal } from "../../../../components/ProductPickerModal";
+import { ProductThumb } from "../../../../components/ProductThumb";
 import { apiRequest } from "../../../../lib/api";
 import type { ProductItem, SupplierDetail } from "../../../../lib/types";
 import { useShop } from "../../../../providers";
@@ -332,29 +333,42 @@ export default function SupplierDetailPage() {
                   description="Use Add products to attach inventory items."
                 />
               ) : (
-                data.items.map((link) => (
-                  <div className="list-row" key={link.id}>
-                    <div>
-                      <b>
-                        <Link
-                          href={`/products/${encodeURIComponent(link.inventoryItemId)}`}
-                          style={{ color: "inherit", textDecoration: "none" }}
-                        >
-                          {itemLabel(link.inventoryItem)}
-                        </Link>
-                      </b>
-                      <div className="m mono">
-                        {link.inventoryItem?.sku ?? "No SKU"}
+                data.items.map((link) => {
+                  const label = itemLabel(link.inventoryItem);
+                  return (
+                    <div className="list-row" key={link.id}>
+                      <div className="inv-prod" style={{ flex: 1, minWidth: 0 }}>
+                        <ProductThumb
+                          src={link.inventoryItem?.imageUrl}
+                          label={label}
+                          size="sm"
+                        />
+                        <div className="inv-prod-meta">
+                          <b>
+                            <Link
+                              href={`/products/${encodeURIComponent(link.inventoryItemId)}`}
+                              style={{
+                                color: "inherit",
+                                textDecoration: "none",
+                              }}
+                            >
+                              {label}
+                            </Link>
+                          </b>
+                          <div className="m mono">
+                            {link.inventoryItem?.sku ?? "No SKU"}
+                          </div>
+                        </div>
                       </div>
+                      <Button
+                        disabled={busy}
+                        onClick={() => void detach(link.inventoryItemId)}
+                      >
+                        Detach
+                      </Button>
                     </div>
-                    <Button
-                      disabled={busy}
-                      onClick={() => void detach(link.inventoryItemId)}
-                    >
-                      Detach
-                    </Button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </Card>
 

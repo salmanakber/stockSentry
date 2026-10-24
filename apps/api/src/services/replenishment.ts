@@ -112,6 +112,7 @@ export async function sendReplenishmentEmail(input: {
             productTitle: true,
             variantTitle: true,
             sku: true,
+            imageUrl: true,
           },
         })
       : null,
