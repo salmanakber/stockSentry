@@ -24,5 +24,7 @@ if [[ -z "${NEXT_PUBLIC_SHOPIFY_API_KEY:-}" || "${NEXT_PUBLIC_SHOPIFY_API_KEY}" 
   exit 1
 fi
 cd "$WEB_DIR"
-export NODE_ENV="${NODE_ENV:-production}"
+# Root .env often has NODE_ENV=development — never let that leak into next build
+# (causes non-standard NODE_ENV warning and /404 Html prerender failures).
+export NODE_ENV=production
 exec ../../node_modules/.bin/next build "$@"
