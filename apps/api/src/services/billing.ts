@@ -368,7 +368,7 @@ export async function createPlanSubscription(input: {
     {
       name: `StockSentry ${plan.displayName}`,
       returnUrl: embeddedReturnUrl(input.shopDomain),
-      trialDays: plan.trialDays ?? 7,
+      trialDays: plan.trialDays ?? 0,
       test: testBilling,
       lineItems: [
         {

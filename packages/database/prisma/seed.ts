@@ -35,7 +35,7 @@ const PLAN_SEEDS = [
     description:
       "For growing stores — more items, CSV exports, and monthly AI incident reports.",
     priceUsdMonthly: 14.99,
-    trialDays: 14,
+    trialDays: 0,
     maxMonitoredItems: 500,
     historyDays: 60,
     maxOpenIncidents: 100,
@@ -56,7 +56,7 @@ const PLAN_SEEDS = [
     description:
       "Advanced detection rules, team workflows, and deeper history for serious ops teams.",
     priceUsdMonthly: 39.99,
-    trialDays: 14,
+    trialDays: 0,
     maxMonitoredItems: 5000,
     historyDays: 180,
     maxOpenIncidents: 1000,
@@ -77,7 +77,7 @@ const PLAN_SEEDS = [
     description:
       "High-volume catalogs and multi-location merchants who need scale.",
     priceUsdMonthly: 99,
-    trialDays: 14,
+    trialDays: 0,
     maxMonitoredItems: 50000,
     historyDays: 365,
     maxOpenIncidents: 10000,

@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { Button } from "../../../components/Button";
 import { Card } from "../../../components/Card";
@@ -124,6 +132,10 @@ export default function BundlesPage() {
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [createOpen, setCreateOpen] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+  const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -228,6 +240,52 @@ export default function BundlesPage() {
     selectedId,
     filtered,
   ]);
+
+  useEffect(() => {
+    if (!menuId) {
+      setMenuPos(null);
+      return;
+    }
+    const place = () => {
+      const btn = menuBtnRefs.current.get(menuId);
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      const width = 168;
+      const left = Math.min(
+        Math.max(8, r.right - width),
+        window.innerWidth - width - 8,
+      );
+      setMenuPos({ top: r.bottom + 6, left });
+    };
+    place();
+    const onClose = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (
+        menuBtnRefs.current.get(menuId)?.contains(t) ||
+        (t as HTMLElement).closest?.(".bg-menu")
+      ) {
+        return;
+      }
+      setMenuId(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuId(null);
+    };
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    document.addEventListener("mousedown", onClose);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+      document.removeEventListener("mousedown", onClose);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuId]);
+
+  const openRowMenu = (id: string) => {
+    setMenuId((prev) => (prev === id ? null : id));
+  };
 
   const createGroup = async () => {
     if (!name.trim() || creating) return;
@@ -658,35 +716,18 @@ export default function BundlesPage() {
                                 type="button"
                                 className="bg-menu-btn"
                                 aria-label="Actions"
-                                onClick={() =>
-                                  setMenuId((id) => (id === g.id ? null : g.id))
-                                }
+                                aria-expanded={menuId === g.id}
+                                ref={(el) => {
+                                  if (el) menuBtnRefs.current.set(g.id, el);
+                                  else menuBtnRefs.current.delete(g.id);
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openRowMenu(g.id);
+                                }}
                               >
                                 ···
                               </button>
-                              {menuId === g.id ? (
-                                <div className="bg-menu">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedId(g.id);
-                                      setDetailTab("components");
-                                      setPickerOpen(true);
-                                      setMenuId(null);
-                                    }}
-                                  >
-                                    Add products
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="danger"
-                                    disabled={busyId === g.id || demo}
-                                    onClick={() => void deleteGroup(g.id)}
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              ) : null}
                             </div>
                           </td>
                         </tr>
@@ -982,6 +1023,44 @@ export default function BundlesPage() {
         confirmLabel="Add to group"
         excludeIds={attachedIds}
       />
+
+      {menuId && menuPos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="bg-menu bg-menu-fixed"
+              style={
+                {
+                  top: menuPos.top,
+                  left: menuPos.left,
+                } as CSSProperties
+              }
+              role="menu"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setSelectedId(menuId);
+                  setDetailTab("components");
+                  setPickerOpen(true);
+                  setMenuId(null);
+                }}
+              >
+                Add products
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="danger"
+                disabled={busyId === menuId || demo}
+                onClick={() => void deleteGroup(menuId)}
+              >
+                Delete
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
