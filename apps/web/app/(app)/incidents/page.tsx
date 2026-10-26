@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "../../../components/Button";
 import { Card } from "../../../components/Card";
 import { Icon } from "../../../components/IconSprite";
-import { PageHeader } from "../../../components/shared/PageHeader";
 import { EmptyState } from "../../../components/shared/EmptyState";
 import {
   IncidentFilters,
@@ -94,6 +93,23 @@ export default function IncidentsPage() {
     [items, filters],
   );
 
+  const kpis = useMemo(() => {
+    const open = items.filter(
+      (i) => i.status !== "resolved" && i.status !== "dismissed",
+    );
+    const high = open.filter((i) => i.severity === "high").length;
+    const investigating = items.filter(
+      (i) => i.status === "investigating",
+    ).length;
+    const resolved = items.filter((i) => i.status === "resolved").length;
+    return {
+      open: open.length,
+      high,
+      investigating,
+      resolved,
+    };
+  }, [items]);
+
   const onExport = async () => {
     if (demo) {
       showToast("CSV export is unavailable in demo mode");
@@ -117,16 +133,52 @@ export default function IncidentsPage() {
 
   return (
     <div className="pg">
-      <PageHeader
-        title="Incidents"
-        subtitle="Deterministic rule flags for review. A flag is not proof of an error."
-        actions={
+      <header className="studio-hero">
+        <div className="studio-hero-copy">
+          <p className="inv-eyebrow">Monitor</p>
+          <h1>
+            Inci<span>dents</span>
+          </h1>
+          <p>
+            Deterministic rule flags for review. A flag is not proof of an
+            error — investigate before you act.
+          </p>
+        </div>
+        <div className="btns">
           <Button onClick={() => void onExport()} disabled={exporting}>
             <Icon id="ex" />
             {exporting ? "Exporting…" : "Export CSV"}
           </Button>
-        }
-      />
+        </div>
+      </header>
+
+      <section className="studio-kpi">
+        {[
+          { label: "Open", value: kpis.open, color: "var(--hot)" },
+          { label: "High severity", value: kpis.high, color: "var(--hot)" },
+          {
+            label: "Investigating",
+            value: kpis.investigating,
+            color: "var(--warn)",
+          },
+          { label: "Resolved", value: kpis.resolved, color: "var(--acc)" },
+        ].map((k, i) => (
+          <Card
+            key={k.label}
+            className="k hv"
+            hover
+            loading={loading}
+            style={{ ["--d" as string]: `${i * 60}ms` }}
+          >
+            <div className="l">
+              <i style={{ background: k.color }} />
+              {k.label}
+            </div>
+            <div className="v">{k.value}</div>
+          </Card>
+        ))}
+      </section>
+
       <Card loading={loading}>
         <IncidentFilters value={filters} onChange={setFilters} />
         {!filtered.length ? (

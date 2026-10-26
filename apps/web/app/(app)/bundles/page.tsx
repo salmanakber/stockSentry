@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "../../../components/Button";
-import { Card, CardTitle } from "../../../components/Card";
+import { Card } from "../../../components/Card";
 import { useShell } from "../../../components/AppShell";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/shared/EmptyState";
@@ -12,11 +12,13 @@ import { ProductPickerModal } from "../../../components/ProductPickerModal";
 import { ProductThumb } from "../../../components/ProductThumb";
 import { PlanLockBadge } from "../../../components/PlanLockBadge";
 import { UpgradeBanner } from "../../../components/UpgradeBanner";
+import { Icon } from "../../../components/IconSprite";
 import { apiRequest } from "../../../lib/api";
 import { DEMO_BUNDLES } from "../../../lib/demo-data";
 import type {
   BillingStatusResponse,
   BundleGroup,
+  BundleGroupItem,
   BundlesListResponse,
   ProductItem,
 } from "../../../lib/types";
@@ -24,6 +26,10 @@ import { useShop } from "../../../providers";
 import { useReveal } from "../../../hooks/useReveal";
 
 const ROLES = ["COMPONENT", "BUNDLE", "SHARED"] as const;
+
+type StockStatus = "in" | "low" | "out";
+type DetailTab = "overview" | "components" | "inventory" | "history";
+type StatusFilter = "all" | StockStatus;
 
 function itemLabel(item?: {
   productTitle?: string | null;
@@ -38,10 +44,53 @@ function itemLabel(item?: {
   return item.sku ? `${base} (${item.sku})` : base;
 }
 
-function riskChip(g: BundleGroup): { label: string; kind: "hot" | "warn" | "ok" } {
-  if (g.hasOpenIncidents) return { label: "Open alerts", kind: "hot" };
-  if (g.hasRefillRisk) return { label: "Refill risk", kind: "warn" };
-  return { label: "Healthy", kind: "ok" };
+function primarySku(g: BundleGroup): string {
+  const first = g.items?.[0]?.inventoryItem?.sku?.trim();
+  return first || "—";
+}
+
+function primaryImage(g: BundleGroup): string | null {
+  return g.items?.[0]?.inventoryItem?.imageUrl ?? null;
+}
+
+function stockStatus(g: BundleGroup): StockStatus {
+  const items = g.items ?? [];
+  if (!items.length) return "in";
+  const qtys = items.map((it) =>
+    typeof it.quantity === "number" ? it.quantity : null,
+  );
+  if (qtys.some((q) => q === 0)) return "out";
+  if (g.hasOpenIncidents || g.hasRefillRisk) return "low";
+  if (qtys.some((q) => q != null && q > 0 && q <= (items[0]?.refillThreshold ?? 10)))
+    return "low";
+  return "in";
+}
+
+function statusLabel(s: StockStatus): string {
+  if (s === "out") return "Out of Stock";
+  if (s === "low") return "Low Stock";
+  return "In Stock";
+}
+
+function bottleneckStock(g: BundleGroup): number | null {
+  const qtys = (g.items ?? [])
+    .map((it) => (typeof it.quantity === "number" ? it.quantity : null))
+    .filter((q): q is number => q != null);
+  if (!qtys.length) return null;
+  return Math.min(...qtys);
+}
+
+function componentStatusLabel(it: BundleGroupItem): {
+  kind: StockStatus;
+  text: string;
+} {
+  const q = typeof it.quantity === "number" ? it.quantity : null;
+  if (q === 0) return { kind: "out", text: "Out of stock: 0" };
+  if (it.refillAtRisk || (q != null && q <= (it.refillThreshold ?? 10))) {
+    return { kind: "low", text: `Low stock: ${q ?? "—"}` };
+  }
+  if (q != null) return { kind: "in", text: `In stock: ${q}` };
+  return { kind: "in", text: "In stock" };
 }
 
 export default function BundlesPage() {
@@ -69,6 +118,12 @@ export default function BundlesPage() {
     message?: string;
   } | null>(null);
   const [atBundleLimit, setAtBundleLimit] = useState(false);
+  const [qInput, setQInput] = useState("");
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [menuId, setMenuId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,6 +176,39 @@ export default function BundlesPage() {
     [selected],
   );
 
+  const stats = useMemo(() => {
+    const total = groups.length;
+    const components = groups.reduce(
+      (n, g) => n + (g.items?.length ?? 0),
+      0,
+    );
+    const atRisk = groups.filter((g) => stockStatus(g) !== "in").length;
+    const healthy = groups.filter((g) => stockStatus(g) === "in").length;
+    return { total, components, atRisk, healthy };
+  }, [groups]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return groups.filter((g) => {
+      const st = stockStatus(g);
+      if (statusFilter !== "all" && st !== statusFilter) return false;
+      if (!needle) return true;
+      const hay = [
+        g.name,
+        g.description,
+        primarySku(g),
+        ...(g.items ?? []).flatMap((it) => [
+          it.inventoryItem?.productTitle,
+          it.inventoryItem?.sku,
+        ]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [groups, q, statusFilter]);
+
   useEffect(() => {
     const g = groups.find((x) => x.id === selectedId);
     if (!g) {
@@ -133,7 +221,13 @@ export default function BundlesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  useReveal(ready && !loading, null, [groups, ready, loading, selectedId]);
+  useReveal(ready && !loading, null, [
+    groups,
+    ready,
+    loading,
+    selectedId,
+    filtered,
+  ]);
 
   const createGroup = async () => {
     if (!name.trim() || creating) return;
@@ -154,6 +248,7 @@ export default function BundlesPage() {
       });
       setName("");
       setDescription("");
+      setCreateOpen(false);
       showToast("Bundle group created");
       await load();
       if (created?.id) setSelectedId(created.id);
@@ -202,6 +297,7 @@ export default function BundlesPage() {
       return;
     }
     setBusyId(id);
+    setMenuId(null);
     try {
       await apiRequest(`/api/v1/bundles/${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -247,6 +343,7 @@ export default function BundlesPage() {
           : "No new products to add",
       );
       setPickerOpen(false);
+      setDetailTab("components");
       await load();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Add products failed");
@@ -276,50 +373,83 @@ export default function BundlesPage() {
     }
   };
 
+  const selectedStatus = selected ? stockStatus(selected) : null;
+  const selectedStock = selected ? bottleneckStock(selected) : null;
+  const allComponentsHealthy =
+    selected &&
+    (selected.items ?? []).length > 0 &&
+    !(selected.hasOpenIncidents || selected.hasRefillRisk) &&
+    stockStatus(selected) === "in";
+
   return (
-    <div className="pg bundle-studio">
-      <header className="bundle-hero">
-        <div>
+    <div className="pg bg-studio">
+      <header className="bg-hero">
+        <div className="bg-hero-copy">
           <p className="inv-eyebrow">Catalog</p>
-          <h1>Bundle Groups</h1>
+          <h1>
+            Bundle <span>Groups</span>
+          </h1>
           <p>
-            Map gift sets and kits to components — alerts only, never writes
-            Shopify qty.
+            Map kits and gift sets to components — monitor risk without writing
+            Shopify quantities.
           </p>
+        </div>
+        <div className="bg-hero-banner" aria-hidden={false}>
+          <div className="bg-hero-banner-mark">
+            <Icon id="sh" />
+          </div>
+          <div>
+            <b>Why groups matter</b>
+            <ul>
+              <li>Track all components</li>
+              <li>Detect low stock early</li>
+              <li>Prevent kit stockouts</li>
+            </ul>
+          </div>
         </div>
       </header>
 
-      <section className="bundle-steps">
-        <div className="bundle-step" style={{ ["--k" as string]: 0 }}>
-          <span className="bundle-step-n">1</span>
-          <div>
-            <b>Create a group</b>
-            <small>Name the gift set or kit you sell</small>
-          </div>
-        </div>
-        <div className="bundle-step-line" aria-hidden />
-        <div className="bundle-step" style={{ ["--k" as string]: 1 }}>
-          <span className="bundle-step-n">2</span>
-          <div>
-            <b>Add components</b>
-            <small>Attach the products that make up the bundle</small>
-          </div>
-        </div>
-        <div className="bundle-step-line" aria-hidden />
-        <div className="bundle-step" style={{ ["--k" as string]: 2 }}>
-          <span className="bundle-step-n">3</span>
-          <div>
-            <b>Watch risk</b>
-            <small>Investigate when components flag or run low</small>
-          </div>
-        </div>
+      <section className="bg-kpi">
+        {[
+          {
+            label: "Total Bundle Groups",
+            value: stats.total,
+            tone: "acc" as const,
+          },
+          {
+            label: "Total Components",
+            value: stats.components,
+            tone: "acc" as const,
+          },
+          {
+            label: "At Risk (Low Stock)",
+            value: stats.atRisk,
+            tone: "hot" as const,
+          },
+          {
+            label: "Healthy Bundles",
+            value: stats.healthy,
+            tone: "acc" as const,
+          },
+        ].map((k, i) => (
+          <Card
+            key={k.label}
+            className="bg-kpi-card hv"
+            hover
+            loading={loading}
+            style={{ ["--d" as string]: `${i * 60}ms` }}
+          >
+            <div className="l">
+              <i style={{ background: k.tone === "hot" ? "var(--hot)" : "var(--acc)" }} />
+              {k.label}
+            </div>
+            <div className="v">{k.value}</div>
+          </Card>
+        ))}
       </section>
 
       {entitlement ? (
-        <UpgradeBanner
-          code={entitlement.code}
-          message={entitlement.message}
-        />
+        <UpgradeBanner code={entitlement.code} message={entitlement.message} />
       ) : null}
 
       {error ? (
@@ -336,13 +466,13 @@ export default function BundlesPage() {
           />
         </Card>
       ) : !groups.length && !loading ? (
-        <Card className="bundle-empty-card">
+        <Card className="bg-empty">
           <EmptyState
             icon="bu"
             title="No bundle groups yet"
-            description="Create a group for a kit or gift set, then add the products that make it up. StockSentry highlights risk — it never changes Shopify quantities."
+            description="Create a group for a kit or gift set, then add the products that make it up."
             action={
-              <div className="bundle-empty-form">
+              <div className="bg-empty-form">
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -362,145 +492,311 @@ export default function BundlesPage() {
           />
         </Card>
       ) : (
-        <div className="bundle-studio-layout">
-          <aside className="bundle-studio-list">
-            <div className="bundle-gallery">
-              {loading
-                ? Array.from({ length: 3 }).map((_, i) => (
-                    <Card key={i} loading className="bundle-card">
-                      <div className="bundle-card-top">
-                        <b>Loading…</b>
-                      </div>
-                    </Card>
-                  ))
-                : groups.map((g) => {
-                    const count = g.items?.length ?? 0;
-                    const risk = riskChip(g);
-                    return (
-                      <button
-                        key={g.id}
-                        type="button"
-                        className={`bundle-card${selectedId === g.id ? " on" : ""}`}
-                        onClick={() => setSelectedId(g.id)}
-                      >
-                        <div className="bundle-card-top">
-                          <b>{g.name}</b>
-                          <span className={`chip ${risk.kind === "ok" ? "on" : risk.kind === "hot" ? "hot" : ""}`}>
-                            {risk.label}
-                          </span>
-                        </div>
-                        <div className="bundle-card-meta">
-                          {count} component{count === 1 ? "" : "s"}
-                          {g.openComponentCount
-                            ? ` · ${g.openComponentCount} open`
-                            : ""}
-                        </div>
-                      </button>
-                    );
-                  })}
+        <div className={`bg-workspace${selected ? " has-detail" : ""}`}>
+          <Card loading={loading} className="bg-table-card">
+            <div className="bg-toolbar">
+              <div className="inv-pill">
+                <Icon id="sc" />
+                <input
+                  type="search"
+                  placeholder="Search bundle groups…"
+                  value={qInput}
+                  onChange={(e) => setQInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") setQ(qInput.trim());
+                  }}
+                  aria-label="Search bundle groups"
+                />
+              </div>
+              <select
+                className="inv-pill-select"
+                aria-label="Filter by status"
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as StatusFilter)
+                }
+              >
+                <option value="all">All Statuses</option>
+                <option value="in">In Stock</option>
+                <option value="low">Low Stock</option>
+                <option value="out">Out of Stock</option>
+              </select>
+              <Button onClick={() => setQ(qInput.trim())}>Search</Button>
+              <Button
+                variant="primary"
+                disabled={demo || atBundleLimit}
+                onClick={() => setCreateOpen((v) => !v)}
+              >
+                New group
+              </Button>
+              <PlanLockBadge locked={atBundleLimit} />
             </div>
 
-            <Card className="bundle-create-card">
-              <CardTitle title="New group" subtitle="Add another kit mapping" />
-              <div className="bundle-create">
-                <div className="field">
-                  <label htmlFor="bg-name">Name</label>
-                  <input
-                    id="bg-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Gift set"
-                    disabled={demo}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="bg-desc">Notes</label>
-                  <textarea
-                    id="bg-desc"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Optional"
-                    rows={2}
-                    disabled={demo}
-                  />
-                </div>
-                <div
-                  className="form-actions"
-                  style={{ alignItems: "center", marginTop: 0 }}
-                >
-                  <Button
-                    variant="primary"
-                    disabled={
-                      !name.trim() || creating || demo || atBundleLimit
-                    }
-                    onClick={() => void createGroup()}
-                    title={
-                      atBundleLimit || entitlement
-                        ? "Upgrade to Pro"
-                        : undefined
-                    }
-                  >
-                    {creating ? "Creating…" : "Create group"}
-                  </Button>
-                  <PlanLockBadge locked={atBundleLimit} />
-                </div>
-              </div>
-            </Card>
-          </aside>
-
-          <div className="bundle-studio-detail">
-            {!selected ? (
-              <Card>
-                <EmptyState
-                  icon="bu"
-                  title="Select a group"
-                  description="Choose a bundle card, or create one to start mapping components."
+            {createOpen ? (
+              <div className="bg-create-inline">
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Group name"
+                  disabled={demo}
                 />
-              </Card>
-            ) : (
-              <Card className="bundle-detail-card">
-                <div className="bundle-detail-sticky">
-                  <CardTitle
-                    title={selected.name}
-                    subtitle={selected.relationshipSource ?? "MANUAL"}
-                    action={
-                      <div className="bundle-detail-actions">
-                        <Button
-                          variant="primary"
-                          disabled={!selectedId || busyId === "add"}
-                          onClick={() => setPickerOpen(true)}
-                        >
-                          Add products…
-                        </Button>
-                        <Button
-                          disabled={busyId === selected.id || demo}
-                          onClick={() => void deleteGroup(selected.id)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    }
-                  />
-                </div>
+                <input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Notes (optional)"
+                  disabled={demo}
+                />
+                <Button
+                  variant="primary"
+                  disabled={!name.trim() || creating || demo || atBundleLimit}
+                  onClick={() => void createGroup()}
+                >
+                  {creating ? "Creating…" : "Create"}
+                </Button>
+                <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
+              </div>
+            ) : null}
 
-                <div className="bundle-detail-cols">
-                  <div>
-                    <div className="field-row">
-                      <div className="field">
-                        <label htmlFor="edit-name">Name</label>
-                        <input
-                          id="edit-name"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          disabled={demo}
-                        />
+            {!filtered.length ? (
+              <EmptyState
+                icon="bu"
+                title="No matching groups"
+                description="Try a different search or clear the status filter."
+              />
+            ) : (
+              <div className="bg-table-wrap">
+                <table className="bg-table">
+                  <thead>
+                    <tr>
+                      <th className="bg-check"> </th>
+                      <th>Bundle Name</th>
+                      <th>Components</th>
+                      <th>Stock Status</th>
+                      <th>Total Stock</th>
+                      <th className="bg-actions-col"> </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((g) => {
+                      const st = stockStatus(g);
+                      const items = g.items ?? [];
+                      const shown = items.slice(0, 3);
+                      const extra = Math.max(0, items.length - shown.length);
+                      const stock = bottleneckStock(g);
+                      const on = selectedId === g.id;
+                      return (
+                        <tr
+                          key={g.id}
+                          className={`bg-row${on ? " on" : ""}`}
+                          onClick={() => {
+                            setSelectedId(g.id);
+                            setDetailTab("overview");
+                            setMenuId(null);
+                          }}
+                        >
+                          <td
+                            className="bg-check"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() =>
+                                setSelectedId(on ? null : g.id)
+                              }
+                              aria-label={`Select ${g.name}`}
+                            />
+                          </td>
+                          <td>
+                            <div className="inv-prod">
+                              <ProductThumb
+                                src={primaryImage(g)}
+                                label={g.name}
+                                size="md"
+                              />
+                              <div className="inv-prod-meta">
+                                <b>{g.name}</b>
+                                <span className="mono inv-sku">
+                                  SKU {primarySku(g)}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="bg-stack">
+                              {shown.map((it) => (
+                                <ProductThumb
+                                  key={it.id}
+                                  src={it.inventoryItem?.imageUrl}
+                                  label={itemLabel(it.inventoryItem)}
+                                  size="sm"
+                                  className="bg-stack-thumb"
+                                />
+                              ))}
+                              {extra > 0 ? (
+                                <span className="bg-stack-more">+{extra}</span>
+                              ) : null}
+                              {!items.length ? (
+                                <span className="m">None</span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`bg-pill ${st}`}>
+                              {statusLabel(st)}
+                            </span>
+                          </td>
+                          <td className="mono bg-stock">
+                            {stock != null ? stock.toLocaleString() : "—"}
+                          </td>
+                          <td
+                            className="bg-actions-col"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="bg-menu-wrap">
+                              <button
+                                type="button"
+                                className="bg-menu-btn"
+                                aria-label="Actions"
+                                onClick={() =>
+                                  setMenuId((id) => (id === g.id ? null : g.id))
+                                }
+                              >
+                                ···
+                              </button>
+                              {menuId === g.id ? (
+                                <div className="bg-menu">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedId(g.id);
+                                      setDetailTab("components");
+                                      setPickerOpen(true);
+                                      setMenuId(null);
+                                    }}
+                                  >
+                                    Add products
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="danger"
+                                    disabled={busyId === g.id || demo}
+                                    onClick={() => void deleteGroup(g.id)}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {selected ? (
+            <aside className="bg-detail">
+              <div className="bg-detail-head">
+                <ProductThumb
+                  src={primaryImage(selected)}
+                  label={selected.name}
+                  size="md"
+                />
+                <div className="bg-detail-titles">
+                  <b>{selected.name}</b>
+                  <span className="mono">SKU {primarySku(selected)}</span>
+                </div>
+                {selectedStatus ? (
+                  <span className={`bg-pill ${selectedStatus}`}>
+                    {statusLabel(selectedStatus)}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="bg-detail-close"
+                  aria-label="Close detail"
+                  onClick={() => setSelectedId(null)}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="bg-tabs" role="tablist">
+                {(
+                  [
+                    ["overview", "Overview"],
+                    ["components", "Components"],
+                    ["inventory", "Inventory"],
+                    ["history", "History"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === id}
+                    className={detailTab === id ? "on" : undefined}
+                    onClick={() => setDetailTab(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="bg-detail-body">
+                {detailTab === "overview" ? (
+                  <>
+                    <div className="bg-detail-hero-img">
+                      <ProductThumb
+                        src={primaryImage(selected)}
+                        label={selected.name}
+                        size="lg"
+                      />
+                    </div>
+                    <dl className="bg-detail-dl">
+                      <div>
+                        <dt>Name</dt>
+                        <dd>{selected.name}</dd>
                       </div>
+                      <div>
+                        <dt>SKU</dt>
+                        <dd className="mono">{primarySku(selected)}</dd>
+                      </div>
+                      <div>
+                        <dt>Total Stock</dt>
+                        <dd className="mono">
+                          {selectedStock != null
+                            ? selectedStock.toLocaleString()
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Status</dt>
+                        <dd>
+                          {selectedStatus
+                            ? statusLabel(selectedStatus)
+                            : "—"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="field">
+                      <label htmlFor="edit-name">Edit name</label>
+                      <input
+                        id="edit-name"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        disabled={demo}
+                      />
                     </div>
                     <div className="field">
                       <label htmlFor="edit-notes">Notes</label>
                       <textarea
                         id="edit-notes"
-                        rows={3}
+                        rows={2}
                         value={editNotes}
                         onChange={(e) => setEditNotes(e.target.value)}
                         disabled={demo}
@@ -515,26 +811,73 @@ export default function BundlesPage() {
                         {savingMeta ? "Saving…" : "Save details"}
                       </Button>
                     </div>
-                    <div className="field" style={{ marginTop: 12 }}>
-                      <label htmlFor="bg-role">Role for new items</label>
-                      <select
-                        id="bg-role"
-                        value={role}
-                        onChange={(e) =>
-                          setRole(e.target.value as (typeof ROLES)[number])
-                        }
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="bg-comp-preview">
+                      <div className="ee-sec-title">Components</div>
+                      {(selected.items ?? []).slice(0, 4).map((it) => {
+                        const label = itemLabel(it.inventoryItem);
+                        const cs = componentStatusLabel(it);
+                        return (
+                          <div className="bg-comp-row" key={it.id}>
+                            <ProductThumb
+                              src={it.inventoryItem?.imageUrl}
+                              label={label}
+                              size="sm"
+                            />
+                            <div className="bg-comp-copy">
+                              <b>{label}</b>
+                              <span className="mono">
+                                {it.inventoryItem?.sku?.trim() || "No SKU"}
+                              </span>
+                              <span className={`bg-dot ${cs.kind}`}>
+                                {cs.text}
+                              </span>
+                            </div>
+                            <span className="bg-mult mono">1x</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
+                    {allComponentsHealthy ? (
+                      <div className="bg-ready">
+                        All components are available. This bundle is ready to
+                        ship.
+                      </div>
+                    ) : (selected.items ?? []).length ? (
+                      <div className="bg-ready warn">
+                        Some components need attention before this kit is fully
+                        healthy.
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
 
-                  <div>
-                    <div className="ee-sec-title">Components</div>
+                {detailTab === "components" ? (
+                  <>
+                    <div className="bg-detail-actions">
+                      <div className="field" style={{ margin: 0, flex: 1 }}>
+                        <label htmlFor="bg-role">Role for new items</label>
+                        <select
+                          id="bg-role"
+                          value={role}
+                          onChange={(e) =>
+                            setRole(e.target.value as (typeof ROLES)[number])
+                          }
+                        >
+                          {ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button
+                        variant="primary"
+                        disabled={busyId === "add"}
+                        onClick={() => setPickerOpen(true)}
+                      >
+                        Add products…
+                      </Button>
+                    </div>
                     <div className="bundle-comps">
                       {(selected.items ?? []).length ? (
                         (selected.items ?? []).map((it) => {
@@ -542,6 +885,7 @@ export default function BundlesPage() {
                             it.incidentSummary ??
                             it.inventoryItem?.incidentSummary;
                           const label = itemLabel(it.inventoryItem);
+                          const cs = componentStatusLabel(it);
                           return (
                             <div
                               className={`bundle-comp${it.refillAtRisk ? " risk" : ""}`}
@@ -556,14 +900,9 @@ export default function BundlesPage() {
                                 <b title={label}>{label}</b>
                                 <div className="bundle-comp-meta">
                                   <span className="role">{it.role}</span>
-                                  {it.quantity != null ? (
-                                    <span className="qty">qty {it.quantity}</span>
-                                  ) : null}
-                                  {it.refillAtRisk ? (
-                                    <span className="qty">
-                                      refill ≤ {it.refillThreshold ?? 10}
-                                    </span>
-                                  ) : null}
+                                  <span className={`bg-dot ${cs.kind}`}>
+                                    {cs.text}
+                                  </span>
                                   <IncidentSummaryBadge
                                     summary={summary}
                                     productId={it.inventoryItemId}
@@ -592,11 +931,46 @@ export default function BundlesPage() {
                         />
                       )}
                     </div>
+                  </>
+                ) : null}
+
+                {detailTab === "inventory" ? (
+                  <div className="bg-tab-panel">
+                    <p className="m">
+                      Bottleneck stock across components:{" "}
+                      <b className="mono">
+                        {selectedStock != null
+                          ? selectedStock.toLocaleString()
+                          : "—"}
+                      </b>
+                    </p>
+                    <ul className="bg-inv-list">
+                      {(selected.items ?? []).map((it) => (
+                        <li key={it.id}>
+                          <span>{itemLabel(it.inventoryItem)}</span>
+                          <b className="mono">
+                            {typeof it.quantity === "number"
+                              ? it.quantity
+                              : "—"}
+                          </b>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                </div>
-              </Card>
-            )}
-          </div>
+                ) : null}
+
+                {detailTab === "history" ? (
+                  <div className="bg-tab-panel">
+                    <EmptyState
+                      icon="hi"
+                      title="History lives in Inventory History"
+                      description="Open Inventory History and filter by a component SKU to review quantity observations for this group."
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </aside>
+          ) : null}
         </div>
       )}
 
